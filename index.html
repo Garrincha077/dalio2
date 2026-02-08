@@ -352,6 +352,22 @@ body{font-family:var(--font-sans);background:var(--bg-primary);color:var(--text-
   border-radius:8px;padding:0.8rem 1rem;margin-bottom:0.8rem;
   font-family:var(--font-mono);color:var(--text-secondary);
 }
+.ai-provider-row{display:flex;gap:0.5rem;margin-bottom:0.6rem;align-items:center}
+.ai-provider-btn{
+  font-family:var(--font-mono);font-size:0.72rem;font-weight:600;padding:0.4rem 0.9rem;
+  border-radius:5px;border:1px solid var(--border);cursor:pointer;transition:all 0.2s;
+  background:var(--bg-secondary);color:var(--text-muted);
+}
+.ai-provider-btn:hover{color:var(--text-primary);border-color:var(--text-muted)}
+.ai-provider-btn.active{background:rgba(212,168,67,0.15);color:var(--gold);border-color:var(--gold)}
+.ai-provider-label{font-size:0.72rem;color:var(--text-muted);margin-right:0.3rem}
+.ai-key-section{display:none}
+.ai-key-section.active{display:block}
+.gemini-free-badge{
+  display:inline-block;font-family:var(--font-mono);font-size:0.6rem;font-weight:700;
+  padding:0.1rem 0.4rem;border-radius:8px;background:rgba(16,185,129,0.15);
+  color:var(--green);margin-left:0.4rem;vertical-align:middle;
+}
 
 /* ═══════ AI TEMPLATES ═══════ */
 .ai-templates{display:flex;gap:0.5rem;flex-wrap:wrap;padding:0.6rem 0}
@@ -641,15 +657,35 @@ body{font-family:var(--font-sans);background:var(--bg-primary);color:var(--text-
       <button class="ai-tpl-btn" onclick="runTemplate('contrarian')">Contrarian View</button>
     </div>
 
-    <div class="ai-key-banner" id="aiKeyBanner" style="display:none">
-      <div style="display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap">
-        <span style="font-size:0.82rem">🔑 Running locally — enter your Anthropic API key:</span>
-        <input type="password" id="anthropicKey" placeholder="sk-ant-..." 
-          style="flex:1;min-width:200px;background:var(--bg-secondary);border:1px solid var(--border);border-radius:5px;color:var(--gold);font-family:var(--font-mono);font-size:0.8rem;padding:0.4rem 0.7rem;outline:none"/>
-        <button class="btn btn-gold" onclick="saveAnthropicKey()" style="font-size:0.68rem">Save Key</button>
+    <div class="ai-key-banner" id="aiKeyBanner">
+      <div class="ai-provider-row">
+        <span class="ai-provider-label">AI Provider:</span>
+        <button class="ai-provider-btn" id="provGemini" onclick="setProvider('gemini')">Gemini <span class="gemini-free-badge">FREE</span></button>
+        <button class="ai-provider-btn" id="provClaude" onclick="setProvider('claude')">Claude</button>
       </div>
-      <div style="font-size:0.7rem;color:var(--text-muted);margin-top:0.4rem">
-        Get a key at <a href="https://console.anthropic.com/settings/keys" target="_blank" style="color:var(--gold)">console.anthropic.com</a> · Key is stored locally in your browser only
+
+      <div class="ai-key-section" id="geminiKeySection">
+        <div style="display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap">
+          <span style="font-size:0.82rem">Gemini API key (free):</span>
+          <input type="password" id="geminiKey" placeholder="AIza..."
+            style="flex:1;min-width:200px;background:var(--bg-secondary);border:1px solid var(--border);border-radius:5px;color:var(--green);font-family:var(--font-mono);font-size:0.8rem;padding:0.4rem 0.7rem;outline:none"/>
+          <button class="btn btn-gold" onclick="saveGeminiKey()" style="font-size:0.68rem">Save Key</button>
+        </div>
+        <div style="font-size:0.7rem;color:var(--text-muted);margin-top:0.4rem">
+          Get a FREE key at <a href="https://aistudio.google.com/apikey" target="_blank" style="color:var(--green)">aistudio.google.com/apikey</a> · Gemini 2.0 Flash — fast, free, no credit card
+        </div>
+      </div>
+
+      <div class="ai-key-section" id="claudeKeySection">
+        <div style="display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap">
+          <span style="font-size:0.82rem">Anthropic API key (paid):</span>
+          <input type="password" id="anthropicKey" placeholder="sk-ant-..."
+            style="flex:1;min-width:200px;background:var(--bg-secondary);border:1px solid var(--border);border-radius:5px;color:var(--gold);font-family:var(--font-mono);font-size:0.8rem;padding:0.4rem 0.7rem;outline:none"/>
+          <button class="btn btn-gold" onclick="saveAnthropicKey()" style="font-size:0.68rem">Save Key</button>
+        </div>
+        <div style="font-size:0.7rem;color:var(--text-muted);margin-top:0.4rem">
+          Get a key at <a href="https://console.anthropic.com/settings/keys" target="_blank" style="color:var(--gold)">console.anthropic.com</a> · Requires separate API credits ($5 minimum)
+        </div>
       </div>
     </div>
 
@@ -1409,21 +1445,40 @@ function removeTypingIndicator() {
 }
 
 let aiMode = null; // 'artifact' | 'local'
+let aiProvider = 'gemini'; // 'gemini' | 'claude'
+
+function setProvider(provider) {
+  aiProvider = provider;
+  try { localStorage.setItem('dq3_ai_provider', provider); } catch(e) {}
+  document.getElementById('provGemini').classList.toggle('active', provider === 'gemini');
+  document.getElementById('provClaude').classList.toggle('active', provider === 'claude');
+  document.getElementById('geminiKeySection').classList.toggle('active', provider === 'gemini');
+  document.getElementById('claudeKeySection').classList.toggle('active', provider === 'claude');
+}
 
 // Detect environment on load
 function initAI() {
-  // If running from file:// or localhost, we know it's local mode
+  // Load saved provider preference (default: gemini since it's free)
+  try {
+    const saved = localStorage.getItem('dq3_ai_provider');
+    if (saved === 'claude' || saved === 'gemini') aiProvider = saved;
+  } catch(e) {}
+
+  // Pre-fill saved keys
+  try {
+    const ck = localStorage.getItem('dq3_anthropic_key');
+    if (ck) document.getElementById('anthropicKey').value = ck;
+    const gk = localStorage.getItem('dq3_gemini_key');
+    if (gk) document.getElementById('geminiKey').value = gk;
+  } catch(e) {}
+
+  // If running from file:// or localhost, we know Claude needs local mode
   const isLocal = location.protocol === 'file:' || location.hostname === 'localhost' || location.hostname === '127.0.0.1';
-  if (isLocal) {
-    aiMode = 'local';
-    const banner = document.getElementById('aiKeyBanner');
-    if (banner) banner.style.display = 'block';
-    // Pre-fill saved key
-    try {
-      const saved = localStorage.getItem('dq3_anthropic_key');
-      if (saved) document.getElementById('anthropicKey').value = saved;
-    } catch(e) {}
-  }
+  if (isLocal) aiMode = 'local';
+
+  // Set initial provider UI
+  setProvider(aiProvider);
+
   // Restore previous conversation
   loadAIConversation();
 }
@@ -1433,13 +1488,114 @@ function saveAnthropicKey() {
   if (!k) return;
   try { localStorage.setItem('dq3_anthropic_key', k); } catch(e) {}
   aiMode = 'local';
-  addAIMessage('system', '✅ API key saved. You can now use AI analysis.');
+  setProvider('claude');
+  addAIMessage('system', 'Anthropic API key saved. Claude is now active.');
+}
+
+function saveGeminiKey() {
+  const k = document.getElementById('geminiKey').value.trim();
+  if (!k) return;
+  try { localStorage.setItem('dq3_gemini_key', k); } catch(e) {}
+  setProvider('gemini');
+  addAIMessage('system', 'Gemini API key saved. Gemini 2.0 Flash is now active (free tier).');
 }
 
 function getLocalKey() {
   const el = document.getElementById('anthropicKey');
   if (el && el.value.trim()) return el.value.trim();
   try { return localStorage.getItem('dq3_anthropic_key') || ''; } catch(e) { return ''; }
+}
+
+function getGeminiKey() {
+  const el = document.getElementById('geminiKey');
+  if (el && el.value.trim()) return el.value.trim();
+  try { return localStorage.getItem('dq3_gemini_key') || ''; } catch(e) { return ''; }
+}
+
+// ═══════ GEMINI API ═══════
+async function callGemini(messages) {
+  const key = getGeminiKey();
+  if (!key) {
+    setProvider('gemini');
+    throw new Error('Enter your Gemini API key above. Get a FREE key at aistudio.google.com/apikey');
+  }
+
+  // Convert messages to Gemini format
+  const geminiContents = messages.map(m => ({
+    role: m.role === 'assistant' ? 'model' : 'user',
+    parts: [{ text: m.content }]
+  }));
+
+  const payload = {
+    contents: geminiContents,
+    systemInstruction: { parts: [{ text: AI_SYSTEM }] },
+    generationConfig: {
+      maxOutputTokens: 2500,
+      temperature: 0.7
+    }
+  };
+
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:streamGenerateContent?alt=sse&key=${key}`;
+
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  });
+
+  if (!res.ok) {
+    const err = await res.text();
+    if (res.status === 400 && err.includes('API_KEY')) {
+      throw new Error('Invalid Gemini API key. Get a free key at aistudio.google.com/apikey');
+    }
+    throw new Error(`Gemini API ${res.status}: ${err.slice(0, 200)}`);
+  }
+
+  // Parse Gemini SSE stream
+  return await parseGeminiStream(res);
+}
+
+async function parseGeminiStream(res) {
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let fullText = '';
+  let buffer = '';
+
+  createStreamingMessage();
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+
+    const lines = buffer.split('\n');
+    buffer = lines.pop() || '';
+
+    for (const line of lines) {
+      if (!line.startsWith('data: ')) continue;
+      const data = line.slice(6).trim();
+      if (!data || data === '[DONE]') continue;
+      try {
+        const evt = JSON.parse(data);
+        const text = evt.candidates?.[0]?.content?.parts?.[0]?.text;
+        if (text) {
+          fullText += text;
+          updateStreamingMessage(fullText);
+        }
+      } catch (e) { /* skip non-JSON */ }
+    }
+  }
+
+  finalizeStreamingMessage(fullText);
+  return fullText;
+}
+
+// ═══════ UNIFIED AI CALL ═══════
+async function callAI(messages) {
+  if (aiProvider === 'gemini') {
+    return await callGemini(messages);
+  }
+  return await callClaude(messages);
 }
 
 async function callClaude(messages) {
@@ -1466,18 +1622,14 @@ async function callClaude(messages) {
     aiMode = 'artifact';
     return result;
   } catch (e) {
-    // If 401/auth error, we're running locally — need API key
     if (e.message.includes('401') || e.message.includes('authentication') || e.message.includes('Failed to fetch')) {
       aiMode = 'local';
       const key = getLocalKey();
       if (key) {
         return await callWithKey(payload, key);
       }
-      // Show key input
-      document.getElementById('aiKeyBanner').style.display = 'block';
-      const kEl = document.getElementById('anthropicKey');
-      try { const saved = localStorage.getItem('dq3_anthropic_key'); if (saved) kEl.value = saved; } catch(e) {}
-      throw new Error('Running locally — enter your Anthropic API key above to use AI analysis.');
+      setProvider('claude');
+      throw new Error('Enter your Anthropic API key above, or switch to Gemini (free).');
     }
     throw e;
   }
@@ -1548,13 +1700,11 @@ async function callWithKey(payload, key) {
   if (!res.ok) {
     const err = await res.text();
     if (res.status === 401) {
-      document.getElementById('aiKeyBanner').style.display = 'block';
+      setProvider('claude');
       throw new Error('Invalid API key. Check your key at console.anthropic.com/settings/keys');
     }
     throw new Error(`API ${res.status}: ${err.slice(0, 200)}`);
   }
-  // Key works — hide banner
-  document.getElementById('aiKeyBanner').style.display = 'none';
   if (payload.stream && res.body) {
     return await parseSSEStream(res);
   }
@@ -1666,7 +1816,7 @@ async function runTemplate(type) {
     'Contrarian analysis');
 
   try {
-    const reply = await callClaude(aiConversation);
+    const reply = await callAI(aiConversation);
     removeTypingIndicator();
     aiConversation.push({ role: 'assistant', content: reply });
     // If streaming was used, message is already displayed. If not, add it.
@@ -1703,7 +1853,7 @@ async function sendAIMessage() {
   addAIMessage('user', msg);
 
   try {
-    const reply = await callClaude(aiConversation);
+    const reply = await callAI(aiConversation);
     removeTypingIndicator();
     aiConversation.push({ role: 'assistant', content: reply });
     if (!document.getElementById('aiStreaming') && !document.querySelector('.ai-msg.assistant:last-child')?.innerHTML?.includes(reply.slice(0, 50))) {
