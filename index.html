@@ -394,6 +394,29 @@ body{font-family:var(--font-sans);background:var(--bg-primary);color:var(--text-
 .confidence-low{background:rgba(239,68,68,0.15);color:var(--red)}
 .ai-stream-cursor{display:inline-block;width:2px;height:1em;background:var(--gold);animation:blink 1s step-end infinite;vertical-align:text-bottom;margin-left:2px}
 
+/* ═══════ AI FETCH BTN ═══════ */
+.btn-ai-fetch{
+  background:linear-gradient(135deg,#8b5cf6,#6d28d9);color:#fff;border-color:#8b5cf6;
+  position:relative;overflow:hidden;
+}
+.btn-ai-fetch:hover{filter:brightness(1.15)}
+.btn-ai-fetch .badge{
+  font-size:0.55rem;background:rgba(255,255,255,0.25);padding:0.05rem 0.3rem;
+  border-radius:6px;margin-left:0.3rem;vertical-align:middle;
+}
+.ai-fill-result{
+  background:rgba(139,92,246,0.08);border:1px solid rgba(139,92,246,0.25);
+  border-radius:8px;padding:0.7rem 1rem;margin:0.5rem 2rem;
+  font-family:var(--font-mono);font-size:0.75rem;color:var(--text-secondary);
+  display:none;
+}
+.ai-fill-result.active{display:block}
+.ai-fill-result .fill-title{color:#8b5cf6;font-weight:700;font-size:0.78rem;margin-bottom:0.4rem}
+.ai-fill-result .fill-item{display:flex;justify-content:space-between;padding:0.15rem 0;border-bottom:1px solid rgba(255,255,255,0.03)}
+.ai-fill-result .fill-item .fname{color:var(--text-muted)}
+.ai-fill-result .fill-item .fval{color:var(--text-primary);font-weight:600}
+.ai-fill-result .fill-warn{color:var(--orange);font-size:0.7rem;margin-top:0.4rem;font-style:italic}
+
 /* ═══════ LOADING ═══════ */
 .loading-overlay{
   display:none;position:fixed;inset:0;background:rgba(10,14,23,0.85);z-index:1000;
@@ -421,7 +444,8 @@ body{font-family:var(--font-sans);background:var(--bg-primary);color:var(--text-
       <label>FRED API:</label>
       <input type="text" id="fredApiKey" placeholder="Enter key for live data..." />
     </div>
-    <button class="btn btn-gold" onclick="fetchAllFRED()">⟳ Fetch</button>
+    <button class="btn btn-gold" onclick="fetchAllFRED()">⟳ FRED</button>
+    <button class="btn btn-ai-fetch" onclick="aiAutoFill()">✦ AI Fetch<span class="badge">FREE</span></button>
     <button class="btn btn-outline" onclick="exportState()">Export</button>
     <button class="btn btn-outline" onclick="document.getElementById('importFile').click()">Import</button>
     <input type="file" id="importFile" style="display:none" accept=".json" onchange="importState(event)">
@@ -437,6 +461,7 @@ body{font-family:var(--font-sans);background:var(--bg-primary);color:var(--text-
 </div>
 
 <div class="recession-banner" id="recessionBanner">⚠ RECESSION WARNING — Multiple recession indicators triggered. Elevated probability of economic contraction.</div>
+<div class="ai-fill-result" id="aiFillResult"></div>
 
 <!-- ══════════ TAB: DASHBOARD ══════════ -->
 <div class="tab-content active" id="tab-dashboard">
@@ -1174,6 +1199,174 @@ async function fetchAllFRED(){
   if(errors.length&&f===0)msg+=`\n\n⚠ All fetches failed. Check:\n1. Is your FRED API key valid?\n2. Try opening this page via a local server (e.g. python -m http.server)\n\nFailed series: ${errors.slice(0,5).join(', ')}`;
   else if(errors.length)msg+=`\n\nFailed: ${errors.join(', ')}`;
   alert(msg);
+}
+
+// ═══════ AI AUTO-FILL ═══════
+const AI_FILL_PROMPT = `You are a macroeconomic data assistant. Provide your BEST CURRENT ESTIMATES for these US economic indicators based on the most recent data available to you.
+
+Return ONLY a valid JSON object with these exact keys and numeric values (no comments, no explanation, just JSON):
+
+{
+  "real_gdp": <Real GDP YoY % — BEA quarterly, e.g. 2.4>,
+  "nominal_gdp": <Nominal GDP YoY % — e.g. 5.1>,
+  "ism_pmi": <ISM Manufacturing PMI index — e.g. 52.6>,
+  "ind_prod": <Industrial Production YoY % — e.g. 0.8>,
+  "new_orders": <New Manufacturing Orders YoY % — e.g. 1.5>,
+  "payrolls": <Nonfarm Payrolls YoY % — e.g. 1.4>,
+  "temp_help": <Temp Help Services YoY % — e.g. -3.5>,
+  "loans": <Total Loan Growth YoY % — e.g. 2.0>,
+  "nfci": <Chicago Fed NFCI index — negative=loose, e.g. -0.56>,
+  "fed_liq": <Fed Net Liquidity YoY % change (WALCL-TGA-RRP) — e.g. -6.0>,
+  "core_pce": <Core PCE YoY % — e.g. 2.6>,
+  "cpi": <CPI YoY % — e.g. 2.8>,
+  "roche_lii": <Roche Leading Inflation Index % — Discipline Funds, e.g. 2.35>,
+  "wages": <Average Hourly Earnings YoY % — e.g. 3.8>,
+  "shelter": <Shelter CPI YoY % — e.g. 4.0>,
+  "misery": <Misery Index (Unemployment Rate + CPI YoY) — e.g. 6.8>,
+  "ffr": <Federal Funds Rate % — e.g. 4.50>,
+  "sahm": <Sahm Rule indicator — e.g. 0.43>,
+  "yc": <10Y-2Y Treasury Yield Spread — e.g. 0.15>,
+  "hy": <High-Yield Credit Spread OAS % — e.g. 3.4>,
+  "roche_rec": <Roche Recession Rule — 0 or 1>,
+  "ue": <Unemployment Rate % — e.g. 4.0>,
+  "nfci_w": <NFCI Stress (same as nfci) — e.g. -0.56>,
+  "temp_w": <Temp Help Decline YoY % (same as temp_help) — e.g. -3.5>,
+  "data_date": "<approximate date of your data, e.g. 2025-Q1>"
+}
+
+Use the most recent data available. If you're unsure about a specific value, use your best estimate. For nfci_w use same value as nfci. For temp_w use same value as temp_help. Return ONLY valid JSON.`;
+
+async function aiAutoFill() {
+  const overlay = document.getElementById('loadingOverlay');
+  const overlayText = overlay.querySelector('span');
+  const origText = overlayText.textContent;
+  overlayText.textContent = 'AI is fetching current indicator values...';
+  overlay.classList.add('active');
+
+  const resultDiv = document.getElementById('aiFillResult');
+  resultDiv.classList.remove('active');
+
+  try {
+    // Use non-streaming call for JSON parsing reliability
+    const messages = [{ role: 'user', content: AI_FILL_PROMPT }];
+
+    let reply;
+    if (aiProvider === 'groq') {
+      reply = await callGroqJSON(messages);
+    } else if (aiProvider === 'gemini') {
+      reply = await callGeminiJSON(messages);
+    } else {
+      reply = await callClaudeJSON(messages);
+    }
+
+    // Extract JSON from response (handle markdown code blocks)
+    let jsonStr = reply;
+    const jsonMatch = reply.match(/```(?:json)?\s*([\s\S]*?)```/);
+    if (jsonMatch) jsonStr = jsonMatch[1];
+    // Also try to find raw JSON object
+    const braceMatch = jsonStr.match(/\{[\s\S]*\}/);
+    if (braceMatch) jsonStr = braceMatch[0];
+
+    const data = JSON.parse(jsonStr);
+    const filled = [];
+
+    // Apply values to all indicators
+    [...G_IND, ...I_IND].forEach(ind => {
+      if (data[ind.id] !== undefined && !isNaN(parseFloat(data[ind.id]))) {
+        const val = Math.round(parseFloat(data[ind.id]) * 100) / 100;
+        state.values[ind.id] = val;
+        const inp = document.getElementById('in_' + ind.id);
+        if (inp) inp.value = val;
+        filled.push({ name: ind.name, val, unit: ind.unit });
+      }
+    });
+
+    W_IND.forEach(w => {
+      if (data[w.id] !== undefined && !isNaN(parseFloat(data[w.id]))) {
+        const val = Math.round(parseFloat(data[w.id]) * 100) / 100;
+        state.values[w.id] = val;
+        const inp = document.getElementById('wi_' + w.id);
+        if (inp) inp.value = val;
+        filled.push({ name: w.name, val, unit: '' });
+      }
+    });
+
+    renderG(); renderI(); renderW(); save();
+
+    // Show result summary
+    const dataDate = data.data_date || 'unknown';
+    let html = `<div class="fill-title">✦ AI Auto-Fill Complete — ${filled.length} indicators updated (data ~${dataDate})</div>`;
+    filled.forEach(f => {
+      html += `<div class="fill-item"><span class="fname">${f.name}</span><span class="fval">${f.val}${f.unit ? ' ' + f.unit : ''}</span></div>`;
+    });
+    html += `<div class="fill-warn">Values are AI estimates based on training data. Verify critical values before trading decisions. Press "Calculate & Log" to compute regime.</div>`;
+    resultDiv.innerHTML = html;
+    resultDiv.classList.add('active');
+
+    // Auto-hide after 30 seconds
+    setTimeout(() => resultDiv.classList.remove('active'), 30000);
+
+  } catch (e) {
+    alert('AI Auto-Fill failed: ' + e.message + '\n\nMake sure you have an API key configured for ' + aiProvider + '.');
+  }
+
+  overlay.classList.remove('active');
+  overlayText.textContent = origText;
+}
+
+// Non-streaming API calls for JSON parsing
+async function callGroqJSON(messages) {
+  const key = getGroqKey();
+  if (!key) throw new Error('Enter Groq API key first');
+  const res = await fetchWithRetry('https://api.groq.com/openai/v1/chat/completions', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${key}` },
+    body: JSON.stringify({
+      model: 'llama-3.3-70b-versatile', max_tokens: 1500, temperature: 0.3,
+      messages: [{ role: 'system', content: 'You are a macroeconomic data provider. Return only valid JSON.' }, ...messages]
+    })
+  });
+  if (!res.ok) throw new Error(`Groq ${res.status}`);
+  const data = await res.json();
+  return data.choices[0].message.content;
+}
+
+async function callGeminiJSON(messages) {
+  const key = getGeminiKey();
+  if (!key) throw new Error('Enter Gemini API key first');
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${key}`;
+  const res = await fetchWithRetry(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      contents: [{ role: 'user', parts: [{ text: AI_FILL_PROMPT }] }],
+      systemInstruction: { parts: [{ text: 'You are a macroeconomic data provider. Return only valid JSON.' }] },
+      generationConfig: { maxOutputTokens: 1500, temperature: 0.3 }
+    })
+  });
+  if (!res.ok) throw new Error(`Gemini ${res.status}`);
+  const data = await res.json();
+  return data.candidates[0].content.parts[0].text;
+}
+
+async function callClaudeJSON(messages) {
+  const key = getLocalKey();
+  if (!key) throw new Error('Enter Anthropic API key first');
+  const res = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json', 'x-api-key': key,
+      'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true',
+    },
+    body: JSON.stringify({
+      model: 'claude-sonnet-4-20250514', max_tokens: 1500,
+      system: 'You are a macroeconomic data provider. Return only valid JSON.',
+      messages
+    })
+  });
+  if (!res.ok) throw new Error(`Claude ${res.status}`);
+  const data = await res.json();
+  return data.content[0].text;
 }
 
 // ═══════ STATE ═══════
