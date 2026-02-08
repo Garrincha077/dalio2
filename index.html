@@ -394,6 +394,18 @@ body{font-family:var(--font-sans);background:var(--bg-primary);color:var(--text-
 .confidence-low{background:rgba(239,68,68,0.15);color:var(--red)}
 .ai-stream-cursor{display:inline-block;width:2px;height:1em;background:var(--gold);animation:blink 1s step-end infinite;vertical-align:text-bottom;margin-left:2px}
 
+/* ═══════ DATA SOURCE BADGES ═══════ */
+.src-badge{
+  display:inline-block;font-family:var(--font-mono);font-size:0.55rem;font-weight:700;
+  padding:0.08rem 0.35rem;border-radius:6px;margin-left:0.3rem;vertical-align:middle;
+  text-transform:uppercase;letter-spacing:0.03em;
+}
+.src-fred{background:rgba(16,185,129,0.15);color:var(--green)}
+.src-ai{background:rgba(139,92,246,0.15);color:#8b5cf6}
+.src-manual{background:rgba(156,163,175,0.1);color:var(--text-muted)}
+.src-default{background:rgba(239,68,68,0.1);color:rgba(239,68,68,0.6)}
+.warning-card .src-badge{font-size:0.5rem;margin-left:0.2rem}
+
 /* ═══════ AI FETCH BTN ═══════ */
 .btn-ai-fetch{
   background:linear-gradient(135deg,#8b5cf6,#6d28d9);color:#fff;border-color:#8b5cf6;
@@ -821,6 +833,7 @@ const W_IND = [
 ];
 
 let state={values:{},overrides:{},fredKey:''};
+let dataSources={}; // Tracks data source per indicator: 'fred' | 'ai' | 'manual' | 'default'
 let hist=[];
 let lastRes=null;
 
@@ -860,6 +873,14 @@ function renderI(){
   I_IND.forEach(i=>c.appendChild(mkRow(i,'inflation')));
 }
 
+function srcBadge(id){
+  const s=dataSources[id];
+  if(s==='fred')return '<span class="src-badge src-fred">FRED</span>';
+  if(s==='ai')return '<span class="src-badge src-ai">AI</span>';
+  if(s==='manual')return '<span class="src-badge src-manual">MANUAL</span>';
+  return '<span class="src-badge src-default">DEFAULT</span>';
+}
+
 function mkRow(ind,type){
   const r=document.createElement('div');r.className='indicator';
   const isO=state.overrides[ind.id]!==undefined;
@@ -867,7 +888,7 @@ function mkRow(ind,type){
   const hp=heatPct(ind,v,type);
   const barClass=type==='growth'?'growth-bar':'infl-bar';
   r.innerHTML=`
-    <div class="ind-name">${ind.name} <span style="color:var(--text-muted);font-size:0.72rem">(${ind.unit})</span>
+    <div class="ind-name">${ind.name} <span style="color:var(--text-muted);font-size:0.72rem">(${ind.unit})</span>${srcBadge(ind.id)}
       <span class="sub">${ind.desc} · ${ind.fred||'MANUAL'}</span></div>
     <div class="heatbar-wrap"><div class="heatbar ${barClass}"><div class="heatbar-thumb" id="ht_${ind.id}" style="left:${hp}%"></div></div></div>
     <input type="number" step="0.01" value="${v}" id="in_${ind.id}" class="${isO?'overridden':''}" oninput="onIn('${ind.id}','${type}',this)"/>
@@ -891,6 +912,7 @@ function clamp(v){return Math.max(0,Math.min(100,v))}
 function onIn(id,type,el){
   const v=parseFloat(el.value);if(isNaN(v))return;
   if(state.overrides[id]!==undefined)state.overrides[id]=v;else state.values[id]=v;
+  dataSources[id]='manual';
   const ind=[...G_IND,...I_IND].find(x=>x.id===id);
   if(ind){const t=document.getElementById('ht_'+id);if(t)t.style.left=heatPct(ind,v,type)+'%'}
   save();
@@ -904,7 +926,7 @@ function renderW(){
     const c=document.createElement('div');
     c.className=`warning-card ${t?'triggered':'safe'}`;c.id=`wc_${w.id}`;
     c.innerHTML=`<div class="warning-light"></div>
-      <div class="warning-info"><div class="w-name">${w.name}</div><div class="w-val">${w.desc}</div></div>
+      <div class="warning-info"><div class="w-name">${w.name}${srcBadge(w.id)}</div><div class="w-val">${w.desc}</div></div>
       <input type="number" step="0.01" class="w-input" value="${v}" id="wi_${w.id}" onchange="updW('${w.id}',this.value)"/>`;
     g.appendChild(c);
   });
@@ -1133,7 +1155,7 @@ function togOvr(id){
   }
   save();
 }
-function updW(id,v){const n=parseFloat(v);if(!isNaN(n))state.values[id]=n;save()}
+function updW(id,v){const n=parseFloat(v);if(!isNaN(n)){state.values[id]=n;dataSources[id]='manual'}save()}
 
 // ═══════ FRED ═══════
 // FRED fetch with CORS proxy fallback
@@ -1163,13 +1185,30 @@ async function fetchAllFRED(){
   if(!k){alert('Enter a FRED API key.\nhttps://fred.stlouisfed.org/docs/api/api_key.html');return}
   state.fredKey=k;
   document.getElementById('loadingOverlay').classList.add('active');
-  const all=[...G_IND,...I_IND,...W_IND].filter(i=>i.fred);
-  const yoyMonthly=['PAYEMS','INDPRO','AMTMNO','TEMPHELPS','TOTLL','CPIAUCSL','CES0500000003','CUSR0000SAH1','PCEPILFE'];
-  const yoyQuarterly=['GDP'];
-  const isYoy=s=>yoyMonthly.includes(s)||yoyQuarterly.includes(s);
-  let f=0,errors=[];
 
-  for(const ind of all){
+  // Categorize FRED series by how to process them
+  // YoY Monthly: need 13 observations to calculate (current/12-months-ago - 1)
+  const yoyMonthly=['PAYEMS','INDPRO','AMTMNO','TEMPHELPS','TOTLL','CPIAUCSL','CES0500000003','CUSR0000SAH1','PCEPILFE'];
+  // YoY Quarterly: need 5 observations (current/4-quarters-ago - 1)
+  const yoyQuarterly=['GDP'];
+  // Direct value: already in correct format (%, index, spread)
+  // A191RL1Q225SBEA = QoQ annualized %, NFCI = index, FEDFUNDS = %, SAHMREALTIME = pp,
+  // T10Y2Y = %, BAMLH0A0HYM2 = %, UNRATE = %
+
+  const all=[...G_IND,...I_IND,...W_IND].filter(i=>i.fred);
+  // Deduplicate FRED series (NFCI and TEMPHELPS are used in both growth + warnings)
+  const seen=new Set();
+  const uniqueAll=[];
+  const dupeMap={}; // fred_id -> [ind objects]
+  all.forEach(ind=>{
+    if(!dupeMap[ind.fred])dupeMap[ind.fred]=[];
+    dupeMap[ind.fred].push(ind);
+    if(!seen.has(ind.fred)){seen.add(ind.fred);uniqueAll.push(ind)}
+  });
+
+  let f=0,errors=[],fetched=[];
+
+  for(const ind of uniqueAll){
     try{
       const lim=yoyQuarterly.includes(ind.fred)?8:yoyMonthly.includes(ind.fred)?15:5;
       const url=`https://api.stlouisfed.org/fred/series/observations?series_id=${ind.fred}&api_key=${k}&file_type=json&sort_order=desc&limit=${lim}`;
@@ -1184,71 +1223,113 @@ async function fetchAllFRED(){
         if(!isNaN(la)&&!isNaN(ya)&&ya!==0)val=((la-ya)/ya)*100;
       }
       if(val===undefined){for(const o of data.observations){if(o.value&&o.value!=='.'){val=parseFloat(o.value);break}}}
-      if(val!==undefined&&!isNaN(val)&&state.overrides[ind.id]===undefined){
-        state.values[ind.id]=Math.round(val*100)/100;
-        const inp=document.getElementById('in_'+ind.id)||document.getElementById('wi_'+ind.id);
-        if(inp)inp.value=state.values[ind.id];f++;
+      if(val!==undefined&&!isNaN(val)){
+        // Apply to all indicators using this FRED series
+        const targets=dupeMap[ind.fred]||[ind];
+        targets.forEach(t=>{
+          if(state.overrides[t.id]===undefined){
+            state.values[t.id]=Math.round(val*100)/100;
+            dataSources[t.id]='fred';
+            const inp=document.getElementById('in_'+t.id)||document.getElementById('wi_'+t.id);
+            if(inp)inp.value=state.values[t.id];
+          }
+        });
+        fetched.push({name:ind.name,series:ind.fred,val:Math.round(val*100)/100});
+        f++;
       }
     }catch(e){errors.push(ind.fred+': '+e.message);console.warn('Failed:',ind.fred,e)}
   }
   document.getElementById('loadingOverlay').classList.remove('active');
   renderG();renderI();renderW();save();
-  let msg=`Fetched ${f}/${all.length} indicators.`;
-  if(f>0)msg+=`\nUsing: ${activeProxy===0?'direct FRED API':activeProxy===1?'corsproxy.io':'allorigins.win'}`;
-  msg+=`\n\nManual entry needed: ISM PMI, Roche LII, Fed Net Liquidity Δ, Roche Recession, Misery Index.`;
-  if(errors.length&&f===0)msg+=`\n\n⚠ All fetches failed. Check:\n1. Is your FRED API key valid?\n2. Try opening this page via a local server (e.g. python -m http.server)\n\nFailed series: ${errors.slice(0,5).join(', ')}`;
-  else if(errors.length)msg+=`\n\nFailed: ${errors.join(', ')}`;
+
+  // Build detailed result
+  const manualIds=[...G_IND,...I_IND,...W_IND].filter(i=>!i.fred);
+  let msg=`✅ FRED Fetch: ${f}/${uniqueAll.length} series fetched successfully.`;
+  if(f>0)msg+=`\nConnection: ${activeProxy===0?'Direct FRED API':activeProxy===1?'corsproxy.io proxy':'allorigins.win proxy'}`;
+
+  msg+=`\n\n📊 Fetched indicators:\n`;
+  fetched.forEach(fi=>msg+=`  ${fi.name} (${fi.series}): ${fi.val}\n`);
+
+  if(errors.length)msg+=`\n⚠ Failed: ${errors.join(', ')}`;
+
+  msg+=`\n\n🔴 NOT available via FRED (need manual entry or AI Fetch):\n`;
+  manualIds.forEach(m=>msg+=`  • ${m.name}\n`);
+
+  msg+=`\n⚠ Note: Real GDP (A191RL1Q225SBEA) reports QoQ annualized rate, not YoY. Consider manual override with actual YoY value.`;
+
   alert(msg);
 }
 
 // ═══════ AI AUTO-FILL ═══════
-const AI_FILL_PROMPT = `You are a macroeconomic data assistant. Provide your BEST CURRENT ESTIMATES for these US economic indicators based on the most recent data available to you.
+function buildAIFillPrompt() {
+  // Tell AI which indicators already have FRED data so it can skip or validate them
+  const fredHave = [];
+  const needAI = [];
 
-Return ONLY a valid JSON object with these exact keys and numeric values (no comments, no explanation, just JSON):
+  [...G_IND, ...I_IND, ...W_IND].forEach(ind => {
+    if (dataSources[ind.id] === 'fred') {
+      fredHave.push(`${ind.id}: ${state.values[ind.id]} (${ind.name} — already fetched from FRED)`);
+    } else {
+      needAI.push(`${ind.id}: ${ind.name} (${ind.unit || ind.desc})`);
+    }
+  });
+
+  return `You are a macroeconomic data assistant. I need CURRENT VALUES for US economic indicators.
+
+${fredHave.length > 0 ? `ALREADY HAVE FROM FRED (verify these if possible, but focus on the missing ones):
+${fredHave.join('\n')}
+
+` : ''}NEED YOUR ESTIMATES FOR:
+${needAI.length > 0 ? needAI.join('\n') : 'All indicators listed below'}
+
+Return ONLY a valid JSON object. Include ALL indicator IDs below, even ones I already have — I will cross-check:
 
 {
-  "real_gdp": <Real GDP YoY % — BEA quarterly, e.g. 2.4>,
+  "real_gdp": <Real GDP YoY % (not QoQ annualized) — e.g. 2.8>,
   "nominal_gdp": <Nominal GDP YoY % — e.g. 5.1>,
-  "ism_pmi": <ISM Manufacturing PMI index — e.g. 52.6>,
+  "ism_pmi": <ISM Manufacturing PMI index (50=neutral) — e.g. 49.2>,
   "ind_prod": <Industrial Production YoY % — e.g. 0.8>,
   "new_orders": <New Manufacturing Orders YoY % — e.g. 1.5>,
-  "payrolls": <Nonfarm Payrolls YoY % — e.g. 1.4>,
-  "temp_help": <Temp Help Services YoY % — e.g. -3.5>,
-  "loans": <Total Loan Growth YoY % — e.g. 2.0>,
-  "nfci": <Chicago Fed NFCI index — negative=loose, e.g. -0.56>,
-  "fed_liq": <Fed Net Liquidity YoY % change (WALCL-TGA-RRP) — e.g. -6.0>,
-  "core_pce": <Core PCE YoY % — e.g. 2.6>,
-  "cpi": <CPI YoY % — e.g. 2.8>,
-  "roche_lii": <Roche Leading Inflation Index % — Discipline Funds, e.g. 2.35>,
-  "wages": <Average Hourly Earnings YoY % — e.g. 3.8>,
-  "shelter": <Shelter CPI YoY % — e.g. 4.0>,
-  "misery": <Misery Index (Unemployment Rate + CPI YoY) — e.g. 6.8>,
-  "ffr": <Federal Funds Rate % — e.g. 4.50>,
-  "sahm": <Sahm Rule indicator — e.g. 0.43>,
-  "yc": <10Y-2Y Treasury Yield Spread — e.g. 0.15>,
-  "hy": <High-Yield Credit Spread OAS % — e.g. 3.4>,
-  "roche_rec": <Roche Recession Rule — 0 or 1>,
-  "ue": <Unemployment Rate % — e.g. 4.0>,
-  "nfci_w": <NFCI Stress (same as nfci) — e.g. -0.56>,
-  "temp_w": <Temp Help Decline YoY % (same as temp_help) — e.g. -3.5>,
-  "data_date": "<approximate date of your data, e.g. 2025-Q1>"
+  "payrolls": <Nonfarm Payrolls YoY % — e.g. 1.6>,
+  "temp_help": <Temp Help Services YoY % — negative if declining, e.g. -4.2>,
+  "loans": <Total Bank Loan Growth YoY % — e.g. 2.0>,
+  "nfci": <Chicago Fed NFCI index — negative=loose, positive=tight, e.g. -0.30>,
+  "fed_liq": <Fed Net Liquidity YoY % change (Fed Balance Sheet minus TGA minus RRP) — e.g. -5.0>,
+  "core_pce": <Core PCE YoY % — Fed's preferred inflation gauge, e.g. 2.8>,
+  "cpi": <CPI All Items YoY % — e.g. 3.0>,
+  "roche_lii": <Roche/Discipline Funds Leading Inflation Index % — estimate based on commodity prices, housing, wages trends, e.g. 2.5>,
+  "wages": <Average Hourly Earnings YoY % — e.g. 4.0>,
+  "shelter": <Shelter CPI YoY % — typically lagging, e.g. 5.0>,
+  "ffr": <Federal Funds Rate target midpoint % — e.g. 5.25>,
+  "sahm": <Sahm Rule value (3mo avg UE - 12mo low) — e.g. 0.30>,
+  "yc": <10Y-2Y Treasury yield spread in % points — positive=normal, negative=inverted, e.g. 0.15>,
+  "hy": <ICE BofA High-Yield OAS spread % — e.g. 3.5>,
+  "roche_rec": <Roche Recession Rule — 0=no recession, 1=recession signal>,
+  "ue": <Unemployment Rate % — e.g. 4.1>,
+  "confidence": <your overall confidence in these estimates: "high", "medium", or "low">,
+  "data_date": "<approximate date of data, e.g. Jan 2025>",
+  "notes": "<any important caveats about specific estimates>"
 }
 
-Use the most recent data available. If you're unsure about a specific value, use your best estimate. For nfci_w use same value as nfci. For temp_w use same value as temp_help. Return ONLY valid JSON.`;
+IMPORTANT: Return ONLY the JSON. No markdown, no explanation, just the raw JSON object.
+For real_gdp provide TRUE YoY growth rate, not the BEA quarterly annualized figure.
+For roche_lii, estimate based on leading inflation components (commodities, housing, wages, expectations).
+Be as accurate as possible using most recent data known to you.`;
+}
 
 async function aiAutoFill() {
   const overlay = document.getElementById('loadingOverlay');
   const overlayText = overlay.querySelector('span');
   const origText = overlayText.textContent;
-  overlayText.textContent = 'AI is fetching current indicator values...';
+  overlayText.textContent = 'AI is estimating current indicator values...';
   overlay.classList.add('active');
 
   const resultDiv = document.getElementById('aiFillResult');
   resultDiv.classList.remove('active');
 
   try {
-    // Use non-streaming call for JSON parsing reliability
-    const messages = [{ role: 'user', content: AI_FILL_PROMPT }];
+    const prompt = buildAIFillPrompt();
+    const messages = [{ role: 'user', content: prompt }];
 
     let reply;
     if (aiProvider === 'groq') {
@@ -1263,48 +1344,109 @@ async function aiAutoFill() {
     let jsonStr = reply;
     const jsonMatch = reply.match(/```(?:json)?\s*([\s\S]*?)```/);
     if (jsonMatch) jsonStr = jsonMatch[1];
-    // Also try to find raw JSON object
     const braceMatch = jsonStr.match(/\{[\s\S]*\}/);
     if (braceMatch) jsonStr = braceMatch[0];
 
     const data = JSON.parse(jsonStr);
     const filled = [];
+    const skipped = [];
+    const warnings = [];
 
-    // Apply values to all indicators
-    [...G_IND, ...I_IND].forEach(ind => {
-      if (data[ind.id] !== undefined && !isNaN(parseFloat(data[ind.id]))) {
-        const val = Math.round(parseFloat(data[ind.id]) * 100) / 100;
+    // Validate and apply values
+    const allInds = [...G_IND, ...I_IND];
+    allInds.forEach(ind => {
+      if (data[ind.id] === undefined || isNaN(parseFloat(data[ind.id]))) {
+        skipped.push(ind.name);
+        return;
+      }
+      const val = Math.round(parseFloat(data[ind.id]) * 100) / 100;
+
+      // Sanity check: flag extreme values
+      if (ind.th) {
+        const lo = ind.th.bear ?? ind.th.fall ?? -999;
+        const hi = ind.th.bull ?? ind.th.rise ?? 999;
+        const range = Math.abs(hi - lo);
+        if (val < lo - range * 2 || val > hi + range * 2) {
+          warnings.push(`${ind.name}: ${val} seems extreme (expected range ~${lo} to ${hi})`);
+        }
+      }
+
+      // Only overwrite non-FRED data, or if FRED data matches within reason
+      if (dataSources[ind.id] === 'fred') {
+        const fredVal = state.values[ind.id];
+        const diff = Math.abs(val - fredVal);
+        if (diff > Math.abs(fredVal) * 0.5 && diff > 1) {
+          warnings.push(`${ind.name}: AI=${val} vs FRED=${fredVal} — large discrepancy`);
+        }
+        // Don't overwrite FRED data
+        filled.push({ name: ind.name, val: fredVal, unit: ind.unit, src: 'FRED (kept)' });
+      } else {
         state.values[ind.id] = val;
+        dataSources[ind.id] = 'ai';
         const inp = document.getElementById('in_' + ind.id);
         if (inp) inp.value = val;
-        filled.push({ name: ind.name, val, unit: ind.unit });
+        filled.push({ name: ind.name, val, unit: ind.unit, src: 'AI' });
       }
     });
 
+    // Warning indicators
     W_IND.forEach(w => {
-      if (data[w.id] !== undefined && !isNaN(parseFloat(data[w.id]))) {
-        const val = Math.round(parseFloat(data[w.id]) * 100) / 100;
+      if (data[w.id] === undefined || isNaN(parseFloat(data[w.id]))) {
+        // Try to derive from shared indicators
+        if (w.id === 'nfci_w' && data.nfci !== undefined) data[w.id] = data.nfci;
+        else if (w.id === 'temp_w' && data.temp_help !== undefined) data[w.id] = data.temp_help;
+        else { skipped.push(w.name); return; }
+      }
+      const val = Math.round(parseFloat(data[w.id]) * 100) / 100;
+      if (dataSources[w.id] === 'fred') {
+        filled.push({ name: w.name, val: state.values[w.id], unit: '', src: 'FRED (kept)' });
+      } else {
         state.values[w.id] = val;
+        dataSources[w.id] = 'ai';
         const inp = document.getElementById('wi_' + w.id);
         if (inp) inp.value = val;
-        filled.push({ name: w.name, val, unit: '' });
+        filled.push({ name: w.name, val, unit: '', src: 'AI' });
       }
     });
+
+    // Auto-compute Misery Index if we have UE and CPI
+    if (data.ue !== undefined && data.cpi !== undefined) {
+      const misery = Math.round((parseFloat(data.ue) + parseFloat(data.cpi)) * 100) / 100;
+      if (dataSources['misery'] !== 'fred') {
+        state.values['misery'] = misery;
+        dataSources['misery'] = 'ai';
+        const mInp = document.getElementById('in_misery');
+        if (mInp) mInp.value = misery;
+      }
+    }
 
     renderG(); renderI(); renderW(); save();
 
     // Show result summary
     const dataDate = data.data_date || 'unknown';
-    let html = `<div class="fill-title">✦ AI Auto-Fill Complete — ${filled.length} indicators updated (data ~${dataDate})</div>`;
+    const confidence = data.confidence || 'unknown';
+    const confClass = confidence === 'high' ? 'confidence-high' : confidence === 'medium' ? 'confidence-medium' : 'confidence-low';
+    const aiFilled = filled.filter(f => f.src === 'AI').length;
+    const fredKept = filled.filter(f => f.src === 'FRED (kept)').length;
+
+    let html = `<div class="fill-title">✦ AI Auto-Fill — ${aiFilled} AI estimated, ${fredKept} FRED kept (data ~${dataDate}) <span class="confidence-badge ${confClass}">${confidence}</span></div>`;
+
     filled.forEach(f => {
-      html += `<div class="fill-item"><span class="fname">${f.name}</span><span class="fval">${f.val}${f.unit ? ' ' + f.unit : ''}</span></div>`;
+      const srcColor = f.src === 'AI' ? 'color:#8b5cf6' : 'color:var(--green)';
+      html += `<div class="fill-item"><span class="fname">${f.name} <span style="font-size:0.6rem;${srcColor}">[${f.src}]</span></span><span class="fval">${f.val}${f.unit ? ' ' + f.unit : ''}</span></div>`;
     });
-    html += `<div class="fill-warn">Values are AI estimates based on training data. Verify critical values before trading decisions. Press "Calculate & Log" to compute regime.</div>`;
+
+    if (warnings.length > 0) {
+      html += `<div class="fill-warn">⚠ Warnings:\n${warnings.map(w => '• ' + w).join('\n')}</div>`;
+    }
+    if (data.notes) {
+      html += `<div class="fill-warn" style="color:var(--text-muted)">AI notes: ${data.notes}</div>`;
+    }
+    html += `<div class="fill-warn">Press "Calculate & Log" to compute regime. Source badges (FRED/AI/DEFAULT) shown on each indicator.</div>`;
+
     resultDiv.innerHTML = html;
     resultDiv.classList.add('active');
-
-    // Auto-hide after 30 seconds
-    setTimeout(() => resultDiv.classList.remove('active'), 30000);
+    setTimeout(() => resultDiv.classList.remove('active'), 60000);
 
   } catch (e) {
     alert('AI Auto-Fill failed: ' + e.message + '\n\nMake sure you have an API key configured for ' + aiProvider + '.');
@@ -1339,7 +1481,7 @@ async function callGeminiJSON(messages) {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      contents: [{ role: 'user', parts: [{ text: AI_FILL_PROMPT }] }],
+      contents: [{ role: 'user', parts: [{ text: messages[0].content }] }],
       systemInstruction: { parts: [{ text: 'You are a macroeconomic data provider. Return only valid JSON.' }] },
       generationConfig: { maxOutputTokens: 1500, temperature: 0.3 }
     })
