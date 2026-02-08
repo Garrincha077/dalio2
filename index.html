@@ -660,8 +660,21 @@ body{font-family:var(--font-sans);background:var(--bg-primary);color:var(--text-
     <div class="ai-key-banner" id="aiKeyBanner">
       <div class="ai-provider-row">
         <span class="ai-provider-label">AI Provider:</span>
+        <button class="ai-provider-btn" id="provGroq" onclick="setProvider('groq')">Groq <span class="gemini-free-badge">FREE</span></button>
         <button class="ai-provider-btn" id="provGemini" onclick="setProvider('gemini')">Gemini <span class="gemini-free-badge">FREE</span></button>
         <button class="ai-provider-btn" id="provClaude" onclick="setProvider('claude')">Claude</button>
+      </div>
+
+      <div class="ai-key-section" id="groqKeySection">
+        <div style="display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap">
+          <span style="font-size:0.82rem">Groq API key (free):</span>
+          <input type="password" id="groqKey" placeholder="gsk_..."
+            style="flex:1;min-width:200px;background:var(--bg-secondary);border:1px solid var(--border);border-radius:5px;color:var(--green);font-family:var(--font-mono);font-size:0.8rem;padding:0.4rem 0.7rem;outline:none"/>
+          <button class="btn btn-gold" onclick="saveGroqKey()" style="font-size:0.68rem">Save Key</button>
+        </div>
+        <div style="font-size:0.7rem;color:var(--text-muted);margin-top:0.4rem">
+          Get a FREE key at <a href="https://console.groq.com/keys" target="_blank" style="color:var(--green)">console.groq.com/keys</a> · Llama 3.3 70B — very fast, free, generous limits (6000 tokens/min)
+        </div>
       </div>
 
       <div class="ai-key-section" id="geminiKeySection">
@@ -672,7 +685,7 @@ body{font-family:var(--font-sans);background:var(--bg-primary);color:var(--text-
           <button class="btn btn-gold" onclick="saveGeminiKey()" style="font-size:0.68rem">Save Key</button>
         </div>
         <div style="font-size:0.7rem;color:var(--text-muted);margin-top:0.4rem">
-          Get a FREE key at <a href="https://aistudio.google.com/apikey" target="_blank" style="color:var(--green)">aistudio.google.com/apikey</a> · Gemini 2.0 Flash — fast, free, no credit card
+          Get a FREE key at <a href="https://aistudio.google.com/apikey" target="_blank" style="color:var(--green)">aistudio.google.com/apikey</a> · Gemini 2.0 Flash — fast, free, 15 req/min limit
         </div>
       </div>
 
@@ -1445,23 +1458,23 @@ function removeTypingIndicator() {
 }
 
 let aiMode = null; // 'artifact' | 'local'
-let aiProvider = 'gemini'; // 'gemini' | 'claude'
+let aiProvider = 'groq'; // 'groq' | 'gemini' | 'claude'
 
 function setProvider(provider) {
   aiProvider = provider;
   try { localStorage.setItem('dq3_ai_provider', provider); } catch(e) {}
-  document.getElementById('provGemini').classList.toggle('active', provider === 'gemini');
-  document.getElementById('provClaude').classList.toggle('active', provider === 'claude');
-  document.getElementById('geminiKeySection').classList.toggle('active', provider === 'gemini');
-  document.getElementById('claudeKeySection').classList.toggle('active', provider === 'claude');
+  ['groq', 'gemini', 'claude'].forEach(p => {
+    document.getElementById('prov' + p.charAt(0).toUpperCase() + p.slice(1))?.classList.toggle('active', provider === p);
+    document.getElementById(p + 'KeySection')?.classList.toggle('active', provider === p);
+  });
 }
 
 // Detect environment on load
 function initAI() {
-  // Load saved provider preference (default: gemini since it's free)
+  // Load saved provider preference (default: groq since it's free with generous limits)
   try {
     const saved = localStorage.getItem('dq3_ai_provider');
-    if (saved === 'claude' || saved === 'gemini') aiProvider = saved;
+    if (['claude', 'gemini', 'groq'].includes(saved)) aiProvider = saved;
   } catch(e) {}
 
   // Pre-fill saved keys
@@ -1470,6 +1483,8 @@ function initAI() {
     if (ck) document.getElementById('anthropicKey').value = ck;
     const gk = localStorage.getItem('dq3_gemini_key');
     if (gk) document.getElementById('geminiKey').value = gk;
+    const qk = localStorage.getItem('dq3_groq_key');
+    if (qk) document.getElementById('groqKey').value = qk;
   } catch(e) {}
 
   // If running from file:// or localhost, we know Claude needs local mode
@@ -1500,6 +1515,14 @@ function saveGeminiKey() {
   addAIMessage('system', 'Gemini API key saved. Gemini 2.0 Flash is now active (free tier).');
 }
 
+function saveGroqKey() {
+  const k = document.getElementById('groqKey').value.trim();
+  if (!k) return;
+  try { localStorage.setItem('dq3_groq_key', k); } catch(e) {}
+  setProvider('groq');
+  addAIMessage('system', 'Groq API key saved. Llama 3.3 70B is now active (free, very fast).');
+}
+
 function getLocalKey() {
   const el = document.getElementById('anthropicKey');
   if (el && el.value.trim()) return el.value.trim();
@@ -1510,6 +1533,105 @@ function getGeminiKey() {
   const el = document.getElementById('geminiKey');
   if (el && el.value.trim()) return el.value.trim();
   try { return localStorage.getItem('dq3_gemini_key') || ''; } catch(e) { return ''; }
+}
+
+function getGroqKey() {
+  const el = document.getElementById('groqKey');
+  if (el && el.value.trim()) return el.value.trim();
+  try { return localStorage.getItem('dq3_groq_key') || ''; } catch(e) { return ''; }
+}
+
+// ═══════ RETRY HELPER ═══════
+async function fetchWithRetry(url, options, maxRetries = 3) {
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    const res = await fetch(url, options);
+    if (res.status === 429 && attempt < maxRetries) {
+      const wait = Math.pow(2, attempt + 1) * 1000; // 2s, 4s, 8s
+      updateStreamingMessage(`Rate limited. Retrying in ${wait/1000}s... (attempt ${attempt + 1}/${maxRetries})`);
+      await new Promise(r => setTimeout(r, wait));
+      continue;
+    }
+    return res;
+  }
+}
+
+// ═══════ GROQ API ═══════
+async function callGroq(messages) {
+  const key = getGroqKey();
+  if (!key) {
+    setProvider('groq');
+    throw new Error('Enter your Groq API key above. Get a FREE key at console.groq.com/keys');
+  }
+
+  const payload = {
+    model: 'llama-3.3-70b-versatile',
+    max_tokens: 2500,
+    temperature: 0.7,
+    stream: true,
+    messages: [
+      { role: 'system', content: AI_SYSTEM },
+      ...messages
+    ]
+  };
+
+  createStreamingMessage();
+
+  const res = await fetchWithRetry('https://api.groq.com/openai/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${key}`
+    },
+    body: JSON.stringify(payload)
+  });
+
+  if (!res.ok) {
+    const err = await res.text();
+    if (res.status === 401) {
+      setProvider('groq');
+      throw new Error('Invalid Groq API key. Get a free key at console.groq.com/keys');
+    }
+    if (res.status === 429) {
+      throw new Error('Groq rate limit exceeded. Wait a moment and try again, or switch to Gemini.');
+    }
+    throw new Error(`Groq API ${res.status}: ${err.slice(0, 200)}`);
+  }
+
+  // Parse OpenAI-compatible SSE stream
+  return await parseGroqStream(res);
+}
+
+async function parseGroqStream(res) {
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let fullText = '';
+  let buffer = '';
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+
+    const lines = buffer.split('\n');
+    buffer = lines.pop() || '';
+
+    for (const line of lines) {
+      if (!line.startsWith('data: ')) continue;
+      const data = line.slice(6).trim();
+      if (data === '[DONE]') break;
+      try {
+        const evt = JSON.parse(data);
+        const delta = evt.choices?.[0]?.delta?.content;
+        if (delta) {
+          fullText += delta;
+          updateStreamingMessage(fullText);
+        }
+      } catch (e) { /* skip */ }
+    }
+  }
+
+  finalizeStreamingMessage(fullText);
+  return fullText;
 }
 
 // ═══════ GEMINI API ═══════
@@ -1537,7 +1659,9 @@ async function callGemini(messages) {
 
   const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:streamGenerateContent?alt=sse&key=${key}`;
 
-  const res = await fetch(url, {
+  createStreamingMessage();
+
+  const res = await fetchWithRetry(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload)
@@ -1547,6 +1671,9 @@ async function callGemini(messages) {
     const err = await res.text();
     if (res.status === 400 && err.includes('API_KEY')) {
       throw new Error('Invalid Gemini API key. Get a free key at aistudio.google.com/apikey');
+    }
+    if (res.status === 429) {
+      throw new Error('Gemini quota exceeded. Wait a minute and retry, or switch to Groq (also free).');
     }
     throw new Error(`Gemini API ${res.status}: ${err.slice(0, 200)}`);
   }
@@ -1560,8 +1687,6 @@ async function parseGeminiStream(res) {
   const decoder = new TextDecoder();
   let fullText = '';
   let buffer = '';
-
-  createStreamingMessage();
 
   while (true) {
     const { done, value } = await reader.read();
@@ -1592,6 +1717,9 @@ async function parseGeminiStream(res) {
 
 // ═══════ UNIFIED AI CALL ═══════
 async function callAI(messages) {
+  if (aiProvider === 'groq') {
+    return await callGroq(messages);
+  }
   if (aiProvider === 'gemini') {
     return await callGemini(messages);
   }
@@ -1629,7 +1757,7 @@ async function callClaude(messages) {
         return await callWithKey(payload, key);
       }
       setProvider('claude');
-      throw new Error('Enter your Anthropic API key above, or switch to Gemini (free).');
+      throw new Error('Enter your Anthropic API key above, or switch to Groq/Gemini (both free).');
     }
     throw e;
   }
