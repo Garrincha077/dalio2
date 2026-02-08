@@ -353,6 +353,31 @@ body{font-family:var(--font-sans);background:var(--bg-primary);color:var(--text-
   font-family:var(--font-mono);color:var(--text-secondary);
 }
 
+/* ═══════ AI TEMPLATES ═══════ */
+.ai-templates{display:flex;gap:0.5rem;flex-wrap:wrap;padding:0.6rem 0}
+.ai-tpl-btn{
+  font-family:var(--font-mono);font-size:0.7rem;font-weight:500;padding:0.4rem 0.8rem;
+  border-radius:16px;border:1px solid var(--border);cursor:pointer;transition:all 0.2s;
+  background:var(--bg-secondary);color:var(--text-secondary);white-space:nowrap;
+}
+.ai-tpl-btn:hover{background:var(--bg-card-hover);color:var(--text-primary);border-color:var(--gold)}
+.ai-tpl-btn.active{background:rgba(212,168,67,0.12);color:var(--gold);border-color:var(--gold)}
+.ai-actions{display:flex;gap:0.5rem;align-items:center}
+.ai-clear-btn{
+  font-family:var(--font-mono);font-size:0.68rem;padding:0.35rem 0.7rem;
+  border-radius:5px;border:1px solid rgba(239,68,68,0.3);cursor:pointer;
+  background:transparent;color:var(--text-muted);transition:all 0.2s;
+}
+.ai-clear-btn:hover{background:rgba(239,68,68,0.1);color:var(--red);border-color:var(--red)}
+.ai-msg.assistant .confidence-badge{
+  display:inline-block;font-family:var(--font-mono);font-size:0.68rem;font-weight:700;
+  padding:0.15rem 0.5rem;border-radius:10px;margin-left:0.4rem;vertical-align:middle;
+}
+.confidence-high{background:rgba(16,185,129,0.15);color:var(--green)}
+.confidence-medium{background:rgba(245,158,11,0.15);color:var(--orange)}
+.confidence-low{background:rgba(239,68,68,0.15);color:var(--red)}
+.ai-stream-cursor{display:inline-block;width:2px;height:1em;background:var(--gold);animation:blink 1s step-end infinite;vertical-align:text-bottom;margin-left:2px}
+
 /* ═══════ LOADING ═══════ */
 .loading-overlay{
   display:none;position:fixed;inset:0;background:rgba(10,14,23,0.85);z-index:1000;
@@ -598,10 +623,22 @@ body{font-family:var(--font-sans);background:var(--bg-primary);color:var(--text-
         <span class="ai-icon">✦</span>
         <div>
           <h2>AI Macro Analyst</h2>
-          <p>Claude analyzes your indicators and provides regime interpretation, risk assessment, and portfolio considerations.</p>
+          <p>Streaming AI analysis with confidence ratings, scenario planning, and contrarian views. Conversations persist across sessions.</p>
         </div>
       </div>
-      <button class="btn btn-calc" id="aiAnalyzeBtn" onclick="runAIAnalysis()">✦ Analyze Current Regime</button>
+      <div class="ai-actions">
+        <button class="btn btn-calc" id="aiAnalyzeBtn" onclick="runAIAnalysis()">✦ Analyze Current Regime</button>
+        <button class="ai-clear-btn" onclick="clearAIChat()">Clear Chat</button>
+      </div>
+    </div>
+
+    <div class="ai-templates" id="aiTemplates">
+      <button class="ai-tpl-btn" onclick="runTemplate('regime')">Full Regime Analysis</button>
+      <button class="ai-tpl-btn" onclick="runTemplate('recession')">Recession Risk Deep-Dive</button>
+      <button class="ai-tpl-btn" onclick="runTemplate('portfolio')">Portfolio Positioning</button>
+      <button class="ai-tpl-btn" onclick="runTemplate('changed')">What Changed?</button>
+      <button class="ai-tpl-btn" onclick="runTemplate('scenario')">Scenario Analysis</button>
+      <button class="ai-tpl-btn" onclick="runTemplate('contrarian')">Contrarian View</button>
     </div>
 
     <div class="ai-key-banner" id="aiKeyBanner" style="display:none">
@@ -619,8 +656,8 @@ body{font-family:var(--font-sans);background:var(--bg-primary);color:var(--text-
     <div class="ai-chat" id="aiChat">
       <div class="ai-empty" id="aiEmpty">
         <div class="ai-empty-icon">✦</div>
-        <p>Press <strong>"Analyze Current Regime"</strong> to get AI interpretation of your macro indicators.</p>
-        <p style="font-size:0.78rem;color:var(--text-muted);margin-top:0.5rem;">You can also ask follow-up questions about the analysis.</p>
+        <p>Press <strong>"Analyze Current Regime"</strong> or choose an analysis template above.</p>
+        <p style="font-size:0.78rem;color:var(--text-muted);margin-top:0.5rem;">Templates: Regime, Recession, Portfolio, Scenario, Contrarian. Ask follow-up questions anytime.</p>
       </div>
     </div>
 
@@ -1131,26 +1168,108 @@ window.addEventListener('resize',()=>{
 
 let aiConversation = [];
 
+function scoreIndicator(ind, type) {
+  const v = gv(ind.id);
+  if (type === 'growth') {
+    if (ind.dir === 'lb') {
+      if (v <= ind.th.bull) return 1;
+      if (v >= ind.th.bear) return -1;
+      return (ind.th.bear - v) / (ind.th.bear - ind.th.bull) * 2 - 1;
+    }
+    if (v >= ind.th.bull) return 1;
+    if (v <= ind.th.bear) return -1;
+    return (v - ind.th.bear) / (ind.th.bull - ind.th.bear) * 2 - 1;
+  } else {
+    if (v >= ind.th.rise) return 1;
+    if (v <= ind.th.fall) return -1;
+    return (v - ind.th.fall) / (ind.th.rise - ind.th.fall) * 2 - 1;
+  }
+}
+
 function buildMacroSnapshot() {
-  const gVals = G_IND.map(i => `${i.name}: ${gv(i.id)} ${i.unit} (thresholds: bear≤${i.th.bear}, bull≥${i.th.bull})`).join('\n');
-  const iVals = I_IND.map(i => `${i.name}: ${gv(i.id)} ${i.unit} (thresholds: fall≤${i.th.fall}, rise≥${i.th.rise})`).join('\n');
+  // Score and rank growth indicators by impact
+  const gScored = G_IND.map(i => {
+    const s = scoreIndicator(i, 'growth');
+    const impact = Math.abs(s * i.w);
+    const signal = s > 0.3 ? 'BULLISH' : s < -0.3 ? 'BEARISH' : 'NEUTRAL';
+    return { ...i, val: gv(i.id), score: s, impact, signal };
+  }).sort((a, b) => b.impact - a.impact);
+
+  const gVals = gScored.map((i, idx) => {
+    const prefix = idx < 3 ? '★' : ' ';
+    return `${prefix} ${i.name}: ${i.val} ${i.unit} [score: ${i.score.toFixed(2)}, weight: ${i.w}, signal: ${i.signal}] (bear≤${i.th.bear}, bull≥${i.th.bull})`;
+  }).join('\n');
+
+  // Score and rank inflation indicators
+  const iScored = I_IND.map(i => {
+    const s = scoreIndicator(i, 'inflation');
+    const impact = Math.abs(s * i.w);
+    const signal = s > 0.3 ? 'HOT' : s < -0.3 ? 'COOL' : 'NEUTRAL';
+    return { ...i, val: gv(i.id), score: s, impact, signal };
+  }).sort((a, b) => b.impact - a.impact);
+
+  const iVals = iScored.map((i, idx) => {
+    const prefix = idx < 3 ? '★' : ' ';
+    return `${prefix} ${i.name}: ${i.val} ${i.unit} [score: ${i.score.toFixed(2)}, weight: ${i.w}, signal: ${i.signal}] (fall≤${i.th.fall}, rise≥${i.th.rise})`;
+  }).join('\n');
+
   const wVals = W_IND.map(w => {
     const v = gv(w.id);
     const triggered = w.dir === 'above' ? v >= w.thr : v <= w.thr;
-    return `${w.name}: ${v} (trigger: ${w.dir === 'above' ? '≥' : '≤'} ${w.thr}) → ${triggered ? '🔴 TRIGGERED' : '🟢 Safe'}`;
+    return `${w.name}: ${v} (trigger: ${w.dir === 'above' ? '≥' : '≤'} ${w.thr}) → ${triggered ? 'TRIGGERED' : 'Safe'}`;
   }).join('\n');
 
   let scores = '';
   if (lastRes) {
     scores = `\nCurrent Scores: Growth=${lastRes.g.toFixed(3)}, Inflation=${lastRes.i.toFixed(3)}, Quadrant=${lastRes.q.toUpperCase()}, Warnings=${lastRes.w}/${W_IND.length}`;
+    // Regime transition proximity
+    const gDist = Math.abs(lastRes.g).toFixed(3);
+    const iDist = Math.abs(lastRes.i).toFixed(3);
+    scores += `\nProximity to quadrant boundary: Growth ${gDist} from zero, Inflation ${iDist} from zero`;
+    if (parseFloat(gDist) < 0.15 || parseFloat(iDist) < 0.15) {
+      scores += ' ⚠ NEAR REGIME TRANSITION';
+    }
+  }
+
+  // What changed analysis
+  let changeAnalysis = '';
+  if (hist.length >= 2) {
+    const prev = hist[hist.length - 2];
+    const curr = hist[hist.length - 1];
+    const gDelta = (curr.g - prev.g).toFixed(3);
+    const iDelta = (curr.i - prev.i).toFixed(3);
+    changeAnalysis = `\n\nCHANGE SINCE LAST CALCULATION:
+Growth: ${prev.g.toFixed(3)} → ${curr.g.toFixed(3)} (${gDelta >= 0 ? '+' : ''}${gDelta})
+Inflation: ${prev.i.toFixed(3)} → ${curr.i.toFixed(3)} (${iDelta >= 0 ? '+' : ''}${iDelta})
+Quadrant: ${prev.q.toUpperCase()} → ${curr.q.toUpperCase()}${prev.q !== curr.q ? ' ⚠ REGIME SHIFT' : ' (unchanged)'}
+Warnings: ${prev.w} → ${curr.w}`;
+
+    // Find which indicators changed most
+    if (curr.vals && prev.vals) {
+      const changes = [];
+      [...G_IND, ...I_IND].forEach(ind => {
+        const cv = curr.ovrs?.[ind.id] ?? curr.vals[ind.id];
+        const pv = prev.ovrs?.[ind.id] ?? prev.vals[ind.id];
+        if (cv !== undefined && pv !== undefined) {
+          const delta = cv - pv;
+          if (Math.abs(delta) > 0.01) changes.push({ name: ind.name, from: pv, to: cv, delta });
+        }
+      });
+      if (changes.length > 0) {
+        changes.sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta));
+        changeAnalysis += '\n\nBiggest indicator moves:\n' + changes.slice(0, 5).map(c =>
+          `  ${c.name}: ${c.from} → ${c.to} (${c.delta >= 0 ? '+' : ''}${c.delta.toFixed(2)})`
+        ).join('\n');
+      }
+    }
   }
 
   // History trail
   let trail = '';
   if (hist.length > 1) {
-    const recent = hist.slice(-6);
-    trail = '\n\nRecent History (newest first):\n' + recent.reverse().map(h =>
-      `${new Date(h.date).toLocaleDateString('en-GB')}: G=${h.g.toFixed(2)} I=${h.i.toFixed(2)} → ${h.q}`
+    const recent = hist.slice(-8);
+    trail = '\n\nREGIME HISTORY (newest first):\n' + recent.reverse().map(h =>
+      `${new Date(h.date).toLocaleDateString('en-GB')}: G=${h.g.toFixed(2)} I=${h.i.toFixed(2)} → ${h.q} (${h.w} warnings)`
     ).join('\n');
   }
 
@@ -1158,29 +1277,71 @@ function buildMacroSnapshot() {
 ═══════════════════════
 ${scores}
 
-GROWTH INDICATORS:
+GROWTH INDICATORS (★ = highest impact):
 ${gVals}
 
-INFLATION INDICATORS:
+INFLATION INDICATORS (★ = highest impact):
 ${iVals}
 
 RECESSION WARNINGS:
 ${wVals}
+${changeAnalysis}
 ${trail}`;
 }
 
-const AI_SYSTEM = `You are a macro-economic analyst assistant embedded in a Dalio Quadrant Dashboard. 
-The dashboard tracks Growth and Inflation indicators to identify which of 4 macro regimes we're in:
-- GOLDILOCKS (Growth+, Inflation-): Best for equities, corp bonds, growth stocks
-- OVERHEATING (Growth+, Inflation+): Best for commodities, TIPS, gold, EM
-- STAGFLATION (Growth-, Inflation+): Best for gold, TIPS, cash, commodities  
-- DEFLATION (Growth-, Inflation-): Best for long treasuries, nominal bonds, USD
+const AI_SYSTEM = `You are an elite macro-economic analyst embedded in a Dalio Quadrant Dashboard. You combine the frameworks of Ray Dalio (All Weather), Cullen Roche (Discipline Funds), and Max Anderson (liquidity analysis).
 
-Based on Ray Dalio's All Weather framework and Cullen Roche / Discipline Funds methodology.
+## QUADRANT FRAMEWORK
+The dashboard maps the economy into 4 regimes using Growth (x-axis) and Inflation (y-axis) scores from -1 to +1:
+- **GOLDILOCKS** (Growth≥0, Inflation<0): Equities, corp bonds, growth stocks, EM equities. The ideal regime.
+- **OVERHEATING** (Growth≥0, Inflation≥0): Commodities, TIPS, gold, EM, real assets. Growth intact but inflation eroding real returns.
+- **STAGFLATION** (Growth<0, Inflation≥0): Gold, TIPS, cash, short-duration. The worst regime — protect capital.
+- **DEFLATION** (Growth<0, Inflation<0): Long treasuries, nominal bonds, USD, quality. Risk-off positioning.
 
-Your job: analyze the provided indicator values, explain the current regime, identify key risks and signals, discuss which indicators are most concerning or encouraging, and suggest portfolio positioning considerations. Be specific — reference actual values. Use clear structure with headers. Be concise but insightful.
+## SCORING
+Each indicator scores from -1 to +1 via linear interpolation between historical thresholds. Weighted average produces composite Growth and Inflation scores.
 
-Important: You are providing analysis, not financial advice. Note this when relevant.`;
+## YOUR ANALYSIS STANDARDS
+1. **Always state a confidence level** (High/Medium/Low) for your regime assessment and key claims
+2. **Reference specific indicator values** — never make vague statements
+3. **Identify the 3 most critical signals** driving the current regime
+4. **Flag contradictions** — when indicators disagree, explain what that means
+5. **Assess regime transition risk** — how close are we to flipping quadrants?
+6. **Rate recession probability** as a percentage when recession indicators are discussed
+7. **Use structured headers** (##) for clear organization
+8. **Be contrarian when warranted** — identify what consensus might be missing
+
+## KEY RELATIONSHIPS TO MONITOR
+- Yield curve inversion → typically leads recession by 12-18 months
+- Sahm Rule trigger → recession likely already underway
+- Temp Help decline → leading indicator, precedes broad payroll weakness by 3-6 months
+- NFCI tightening → financial conditions restricting growth
+- Fed Net Liquidity → drives asset prices with ~3 month lag
+- Shelter CPI → lagging indicator, will overstate current inflation pressure
+- Core PCE vs CPI divergence → signals where true inflation pressure lies
+
+## TONE
+Professional, data-driven, and direct. You are providing analytical commentary for sophisticated macro investors, not financial advice. Note this disclaimer when giving positioning suggestions.`;
+
+function renderMarkdown(content) {
+  let html = content
+    .replace(/#### (.+)/g, '<h4>$1</h4>')
+    .replace(/### (.+)/g, '<h4>$1</h4>')
+    .replace(/## (.+)/g, '<h4>$1</h4>')
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    .replace(/`(.+?)`/g, '<code>$1</code>')
+    .replace(/\n- /g, '\n<li>')
+    .replace(/\n\d+\. /g, (m) => '\n<li>' )
+    .replace(/\n\n/g, '</p><p>')
+    .replace(/\n/g, '<br>');
+  html = '<p>' + html + '</p>';
+  // Confidence badge rendering
+  html = html.replace(/\b(Confidence:\s*)(High|Medium|Low)\b/gi, (m, prefix, level) => {
+    const cls = level.toLowerCase();
+    return `${prefix}<span class="confidence-badge confidence-${cls}">${level}</span>`;
+  });
+  return html;
+}
 
 function addAIMessage(role, content) {
   const chat = document.getElementById('aiChat');
@@ -1190,24 +1351,42 @@ function addAIMessage(role, content) {
   const div = document.createElement('div');
   div.className = `ai-msg ${role}`;
   if (role === 'assistant') {
-    // Basic markdown-like rendering
-    let html = content
-      .replace(/#### (.+)/g, '<h4>$1</h4>')
-      .replace(/### (.+)/g, '<h4>$1</h4>')
-      .replace(/## (.+)/g, '<h4>$1</h4>')
-      .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-      .replace(/`(.+?)`/g, '<code>$1</code>')
-      .replace(/\n- /g, '\n<li>')
-      .replace(/\n\n/g, '</p><p>')
-      .replace(/\n/g, '<br>');
-    html = '<p>' + html + '</p>';
-    div.innerHTML = html;
+    div.innerHTML = renderMarkdown(content);
   } else {
     div.textContent = content;
   }
   chat.appendChild(div);
   chat.scrollTop = chat.scrollHeight;
   return div;
+}
+
+function createStreamingMessage() {
+  const chat = document.getElementById('aiChat');
+  const empty = document.getElementById('aiEmpty');
+  if (empty) empty.style.display = 'none';
+
+  const div = document.createElement('div');
+  div.className = 'ai-msg assistant';
+  div.id = 'aiStreaming';
+  div.innerHTML = '<span class="ai-stream-cursor"></span>';
+  chat.appendChild(div);
+  chat.scrollTop = chat.scrollHeight;
+  return div;
+}
+
+function updateStreamingMessage(text) {
+  const div = document.getElementById('aiStreaming');
+  if (!div) return;
+  div.innerHTML = renderMarkdown(text) + '<span class="ai-stream-cursor"></span>';
+  const chat = document.getElementById('aiChat');
+  chat.scrollTop = chat.scrollHeight;
+}
+
+function finalizeStreamingMessage(text) {
+  const div = document.getElementById('aiStreaming');
+  if (!div) return;
+  div.removeAttribute('id');
+  div.innerHTML = renderMarkdown(text);
 }
 
 function addTypingIndicator() {
@@ -1245,6 +1424,8 @@ function initAI() {
       if (saved) document.getElementById('anthropicKey').value = saved;
     } catch(e) {}
   }
+  // Restore previous conversation
+  loadAIConversation();
 }
 
 function saveAnthropicKey() {
@@ -1264,7 +1445,8 @@ function getLocalKey() {
 async function callClaude(messages) {
   const payload = {
     model: 'claude-sonnet-4-20250514',
-    max_tokens: 1000,
+    max_tokens: 2500,
+    stream: true,
     system: AI_SYSTEM,
     messages: messages
   };
@@ -1301,6 +1483,40 @@ async function callClaude(messages) {
   }
 }
 
+async function parseSSEStream(res) {
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let fullText = '';
+  let buffer = '';
+
+  createStreamingMessage();
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+
+    const lines = buffer.split('\n');
+    buffer = lines.pop() || '';
+
+    for (const line of lines) {
+      if (!line.startsWith('data: ')) continue;
+      const data = line.slice(6).trim();
+      if (data === '[DONE]') break;
+      try {
+        const evt = JSON.parse(data);
+        if (evt.type === 'content_block_delta' && evt.delta?.text) {
+          fullText += evt.delta.text;
+          updateStreamingMessage(fullText);
+        }
+      } catch (e) { /* skip non-JSON lines */ }
+    }
+  }
+
+  finalizeStreamingMessage(fullText);
+  return fullText;
+}
+
 async function callDirect(payload) {
   const res = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
@@ -1310,6 +1526,9 @@ async function callDirect(payload) {
   if (!res.ok) {
     const err = await res.text();
     throw new Error(`API ${res.status}: ${err.slice(0, 200)}`);
+  }
+  if (payload.stream && res.body) {
+    return await parseSSEStream(res);
   }
   const data = await res.json();
   return data.content.map(c => c.type === 'text' ? c.text : '').filter(Boolean).join('\n');
@@ -1336,28 +1555,125 @@ async function callWithKey(payload, key) {
   }
   // Key works — hide banner
   document.getElementById('aiKeyBanner').style.display = 'none';
+  if (payload.stream && res.body) {
+    return await parseSSEStream(res);
+  }
   const data = await res.json();
   return data.content.map(c => c.type === 'text' ? c.text : '').filter(Boolean).join('\n');
 }
 
+// Template prompts for different analysis types
+const AI_TEMPLATES = {
+  regime: `Here is the current macro dashboard data:\n\n{snapshot}\n\nPlease provide a comprehensive analysis of the current macro regime. Cover:
+1. **Overall Regime Assessment** — state the quadrant and your confidence level (High/Medium/Low)
+2. **Top 3 Critical Signals** — the indicators with the highest impact driving this regime
+3. **Growth Analysis** — what's strong, what's weakening, any divergences
+4. **Inflation Analysis** — direction of travel, leading vs lagging signals
+5. **Regime Transition Risk** — how close are we to flipping? Which indicators would need to move?
+6. **Recession Risk Assessment** — based on warning indicators, estimate probability
+7. **Portfolio Positioning** — specific asset class tilts for this environment
+8. **What to Watch Next** — leading indicators and upcoming data releases that matter most`,
+
+  recession: `Here is the current macro dashboard data:\n\n{snapshot}\n\nProvide a deep-dive recession risk analysis:
+1. **Recession Probability Estimate** — give a percentage and confidence level
+2. **Warning Indicator Analysis** — assess each of the 7 recession indicators individually
+3. **Historical Pattern Matching** — which past recession does the current setup most resemble?
+4. **Yield Curve Signal** — what is the curve telling us? Consider lag effects (12-18 months)
+5. **Sahm Rule Status** — current level and trajectory
+6. **Labor Market Assessment** — payrolls + temp help + unemployment composite picture
+7. **Financial Conditions** — NFCI + credit spreads + liquidity picture
+8. **Timeline** — if recession risk is elevated, when would it most likely materialize?
+9. **Key triggers** — what specific data points would escalate or de-escalate the risk?`,
+
+  portfolio: `Here is the current macro dashboard data:\n\n{snapshot}\n\nProvide detailed portfolio positioning recommendations:
+1. **Current Regime Summary** — one paragraph on where we are
+2. **Base All Weather Tilt** — how to tilt from Dalio's 30/40/15/7.5/7.5 allocation
+3. **Equity Positioning** — sectors, geographies, factor tilts (value vs growth, large vs small)
+4. **Fixed Income** — duration, credit quality, TIPS vs nominals
+5. **Commodities & Real Assets** — gold, broad commodities, real estate
+6. **Currency Considerations** — USD direction, EM currency risk
+7. **Hedging Strategies** — what tail risks need hedging in this environment?
+8. **Position Sizing** — conviction level for each tilt
+9. **Risk Factors** — what could make this positioning wrong?
+
+Note: This is analytical commentary for educational purposes, not financial advice.`,
+
+  changed: `Here is the current macro dashboard data:\n\n{snapshot}\n\nFocus on what has CHANGED since the last calculation:
+1. **Regime Status** — has the quadrant shifted? If so, what drove it?
+2. **Biggest Indicator Moves** — which indicators moved the most and what does it mean?
+3. **Direction of Travel** — is the overall macro picture improving or deteriorating?
+4. **Score Trajectory** — are growth and inflation scores accelerating or decelerating?
+5. **Warning Signal Changes** — any new triggers or de-triggers?
+6. **Implications** — what portfolio adjustments, if any, does this suggest?
+7. **Confidence** — has your confidence in the regime assessment increased or decreased?`,
+
+  scenario: `Here is the current macro dashboard data:\n\n{snapshot}\n\nProvide scenario analysis for the next 3-6 months:
+
+**BULL CASE (30% probability — adjust based on data):**
+- What would need to happen to move to/stay in Goldilocks?
+- Which indicators would improve and by how much?
+- Portfolio positioning for this scenario
+
+**BASE CASE (40% probability — adjust based on data):**
+- Most likely path from current levels
+- Expected direction for key indicators
+- Portfolio positioning for this scenario
+
+**BEAR CASE (30% probability — adjust based on data):**
+- What downside risks could materialize?
+- Recession scenario details
+- Defensive positioning for this scenario
+
+For each scenario, provide specific indicator levels you'd expect to see and the resulting quadrant.`,
+
+  contrarian: `Here is the current macro dashboard data:\n\n{snapshot}\n\nProvide a contrarian analysis — challenge the consensus view:
+1. **Consensus Read** — what would most analysts conclude from these indicators?
+2. **What Consensus Might Be Missing** — identify blind spots and overlooked signals
+3. **Lagging vs Leading** — which indicators are backward-looking and might be misleading?
+4. **Indicator Conflicts** — where do the data points disagree, and what does that mean?
+5. **Historical Analogs** — past periods with similar setups where consensus was wrong
+6. **Contrarian Positioning** — if the consensus trade is crowded, what's the other side?
+7. **Key Assumptions** — what assumptions are baked into current market pricing?
+8. **Risk/Reward** — where is the asymmetry? Where are people most likely to be wrong?`
+};
+
 async function runAIAnalysis() {
+  return await runTemplate('regime');
+}
+
+async function runTemplate(type) {
   const btn = document.getElementById('aiAnalyzeBtn');
   btn.disabled = true;
   btn.textContent = '⏳ Analyzing...';
 
-  // Reset conversation for new analysis
-  const snapshot = buildMacroSnapshot();
-  aiConversation = [
-    { role: 'user', content: `Here is the current macro dashboard data:\n\n${snapshot}\n\nPlease provide a comprehensive analysis of the current macro regime. Cover:\n1. Overall regime assessment and confidence level\n2. Key growth signals — what's strong, what's weakening\n3. Key inflation signals — direction of travel\n4. Recession risk assessment based on warning indicators\n5. What to watch — leading indicators that might shift the regime\n6. Portfolio positioning considerations for this environment` }
-  ];
+  // Highlight active template
+  document.querySelectorAll('.ai-tpl-btn').forEach(b => b.classList.remove('active'));
+  const tplBtns = document.querySelectorAll('.ai-tpl-btn');
+  const tplNames = ['regime','recession','portfolio','changed','scenario','contrarian'];
+  const idx = tplNames.indexOf(type);
+  if (idx >= 0 && tplBtns[idx]) tplBtns[idx].classList.add('active');
 
-  addTypingIndicator();
+  const snapshot = buildMacroSnapshot();
+  const prompt = (AI_TEMPLATES[type] || AI_TEMPLATES.regime).replace('{snapshot}', snapshot);
+
+  // Start fresh conversation for new analysis
+  aiConversation = [{ role: 'user', content: prompt }];
+  addAIMessage('user', type === 'regime' ? 'Analyze current macro regime' :
+    type === 'recession' ? 'Deep-dive recession risk analysis' :
+    type === 'portfolio' ? 'Portfolio positioning recommendations' :
+    type === 'changed' ? 'What changed since last calculation?' :
+    type === 'scenario' ? 'Scenario analysis (bull/base/bear)' :
+    'Contrarian analysis');
 
   try {
     const reply = await callClaude(aiConversation);
     removeTypingIndicator();
     aiConversation.push({ role: 'assistant', content: reply });
-    addAIMessage('assistant', reply);
+    // If streaming was used, message is already displayed. If not, add it.
+    if (!document.getElementById('aiStreaming') && !document.querySelector('.ai-msg.assistant:last-child')?.innerHTML?.includes(reply.slice(0, 50))) {
+      addAIMessage('assistant', reply);
+    }
+    saveAIConversation();
   } catch (e) {
     removeTypingIndicator();
     addAIMessage('system', `Error: ${e.message}`);
@@ -1373,7 +1689,7 @@ async function sendAIMessage() {
   if (!msg) return;
   input.value = '';
 
-  // If no prior conversation, include snapshot
+  // If no prior conversation, include snapshot context
   if (aiConversation.length === 0) {
     const snapshot = buildMacroSnapshot();
     aiConversation.push({
@@ -1385,19 +1701,65 @@ async function sendAIMessage() {
   }
 
   addAIMessage('user', msg);
-  addTypingIndicator();
 
   try {
     const reply = await callClaude(aiConversation);
     removeTypingIndicator();
     aiConversation.push({ role: 'assistant', content: reply });
-    addAIMessage('assistant', reply);
+    if (!document.getElementById('aiStreaming') && !document.querySelector('.ai-msg.assistant:last-child')?.innerHTML?.includes(reply.slice(0, 50))) {
+      addAIMessage('assistant', reply);
+    }
+    saveAIConversation();
   } catch (e) {
     removeTypingIndicator();
     addAIMessage('system', `Error: ${e.message}`);
-    // Remove failed user message from conversation
     aiConversation.pop();
   }
+}
+
+// Conversation persistence
+function saveAIConversation() {
+  try {
+    const toSave = aiConversation.slice(-20); // Keep last 20 messages
+    localStorage.setItem('dq3_ai_conversation', JSON.stringify(toSave));
+  } catch(e) {}
+}
+
+function loadAIConversation() {
+  try {
+    const saved = localStorage.getItem('dq3_ai_conversation');
+    if (!saved) return;
+    const msgs = JSON.parse(saved);
+    if (!Array.isArray(msgs) || msgs.length === 0) return;
+    aiConversation = msgs;
+    const chat = document.getElementById('aiChat');
+    const empty = document.getElementById('aiEmpty');
+    if (empty) empty.style.display = 'none';
+    // Replay messages into UI
+    msgs.forEach(m => {
+      if (m.role === 'user') {
+        // Show a shortened version for user prompts that contain snapshot data
+        const display = m.content.includes('MACRO DASHBOARD SNAPSHOT') ?
+          (m.content.match(/User question: (.+)/) || [null, m.content.split('\n')[0]])[1] :
+          m.content;
+        addAIMessage('user', display.slice(0, 200));
+      } else if (m.role === 'assistant') {
+        addAIMessage('assistant', m.content);
+      }
+    });
+  } catch(e) {}
+}
+
+function clearAIChat() {
+  aiConversation = [];
+  try { localStorage.removeItem('dq3_ai_conversation'); } catch(e) {}
+  const chat = document.getElementById('aiChat');
+  chat.innerHTML = `<div class="ai-empty" id="aiEmpty">
+    <div class="ai-empty-icon">✦</div>
+    <p>Press <strong>"Analyze Current Regime"</strong> or choose an analysis template above.</p>
+    <p style="font-size:0.78rem;color:var(--text-muted);margin-top:0.5rem;">You can also ask follow-up questions about the analysis.</p>
+  </div>`;
+  document.querySelectorAll('.ai-tpl-btn').forEach(b => b.classList.remove('active'));
 }
 
 init();
