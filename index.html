@@ -103,6 +103,17 @@ body{font-family:var(--font-sans);background:var(--bg-primary);color:var(--text-
   0%,100%{background:linear-gradient(90deg,rgba(239,68,68,0.15),rgba(239,68,68,0.05))}
   50%{background:linear-gradient(90deg,rgba(239,68,68,0.25),rgba(239,68,68,0.1))}
 }
+.transition-alert{
+  display:none;background:linear-gradient(90deg,rgba(168,85,247,0.15),rgba(168,85,247,0.05));
+  border-bottom:1px solid rgba(168,85,247,0.3);padding:0.5rem 2rem;
+  font-family:var(--font-mono);font-size:0.78rem;color:#a855f7;text-align:center;
+  animation:pulsetrans 3s ease-in-out infinite;
+}
+.transition-alert.active{display:block}
+@keyframes pulsetrans{
+  0%,100%{background:linear-gradient(90deg,rgba(168,85,247,0.15),rgba(168,85,247,0.05))}
+  50%{background:linear-gradient(90deg,rgba(168,85,247,0.25),rgba(168,85,247,0.1))}
+}
 
 /* ═══════ MAIN ═══════ */
 .main{
@@ -473,6 +484,7 @@ body{font-family:var(--font-sans);background:var(--bg-primary);color:var(--text-
 </div>
 
 <div class="recession-banner" id="recessionBanner">⚠ RECESSION WARNING — Multiple recession indicators triggered. Elevated probability of economic contraction.</div>
+<div class="transition-alert" id="transitionAlert"></div>
 <div class="ai-fill-result" id="aiFillResult"></div>
 
 <!-- ══════════ TAB: DASHBOARD ══════════ -->
@@ -521,7 +533,7 @@ body{font-family:var(--font-sans);background:var(--bg-primary);color:var(--text-
 
   <div class="warnings-row panel">
     <div class="panel-header">
-      <div class="panel-title" style="color:var(--red)"><span class="dot" style="background:var(--red)"></span>Recession & Financial Stress</div>
+      <div class="panel-title" style="color:var(--red)"><span class="dot" style="background:var(--red)"></span>Recession Probability & Stress</div>
       <div class="panel-score" id="warningCount" style="background:var(--red-dim);color:var(--red)">—</div>
     </div>
     <div class="panel-body"><div class="warnings-grid" id="warningsGrid"></div></div>
@@ -544,7 +556,7 @@ body{font-family:var(--font-sans);background:var(--bg-primary);color:var(--text-
     <div class="panel"><div class="panel-body">
       <div class="history-table-wrap" id="historyWrap">
         <table class="history-table"><thead><tr>
-          <th>#</th><th>Date</th><th>Growth</th><th>Inflation</th><th>Quadrant</th><th>Warnings</th><th>Action</th>
+          <th>#</th><th>Date</th><th>Growth</th><th>Inflation</th><th>Quadrant</th><th>Rec. Prob</th><th>Action</th>
         </tr></thead><tbody id="historyBody"></tbody></table>
       </div>
       <div id="historyEmpty" style="text-align:center;padding:2.5rem;font-family:var(--font-mono);font-size:0.82rem;color:var(--text-muted)">
@@ -596,19 +608,25 @@ body{font-family:var(--font-sans);background:var(--bg-primary);color:var(--text-
   Weighted Growth Score = Σ(score_i × weight_i) / Σ(weight_i)
 </div>
 
-<h3>Growth Indicators — Thresholds & Weights</h3>
+<h3>Growth Indicators — Thresholds & Weights (16 indicators)</h3>
 <table class="ind-table">
   <tr><th>Indicator</th><th>Unit</th><th>Bearish ≤</th><th>Bullish ≥</th><th>Weight</th><th>Source</th></tr>
-  <tr><td>Real GDP</td><td>% YoY</td><td>1.0%</td><td>2.5%</td><td>1.2</td><td>FRED: A191RL1Q225SBEA</td></tr>
-  <tr><td>Nominal GDP</td><td>% YoY</td><td>3.0%</td><td>5.0%</td><td>0.8</td><td>FRED: GDP</td></tr>
-  <tr><td>ISM Manufacturing PMI</td><td>Index</td><td>47.0</td><td>53.0</td><td>1.0</td><td>Manual (ISM Report)</td></tr>
+  <tr><td>Real GDP YoY</td><td>% YoY</td><td>0.5%</td><td>3.0%</td><td>1.2</td><td>FRED: A191RL1Q225SBEA</td></tr>
+  <tr><td>Real GDP QoQ</td><td>% SAAR</td><td>0.5%</td><td>3.0%</td><td>0.8</td><td>FRED: A191RL1Q225SBEA</td></tr>
+  <tr><td>Nominal GDP</td><td>% YoY</td><td>3.0%</td><td>5.0%</td><td>0.5</td><td>FRED: GDP</td></tr>
+  <tr><td>ISM Manufacturing PMI</td><td>Index</td><td>48.5</td><td>52.5</td><td>1.1</td><td>Manual (ISM Report)</td></tr>
+  <tr><td>ISM Services PMI</td><td>Index</td><td>49.0</td><td>54.0</td><td>1.0</td><td>Manual (ISM Services)</td></tr>
   <tr><td>Industrial Production</td><td>% YoY</td><td>-1.0%</td><td>2.0%</td><td>0.9</td><td>FRED: INDPRO</td></tr>
-  <tr><td>New Mfg Orders</td><td>% YoY</td><td>-3.0%</td><td>3.0%</td><td>0.9</td><td>FRED: AMTMNO</td></tr>
-  <tr><td>Payroll Growth</td><td>% YoY</td><td>0.5%</td><td>2.0%</td><td>1.1</td><td>FRED: PAYEMS</td></tr>
-  <tr><td>Temp Help Services</td><td>% YoY</td><td>-4.0%</td><td>2.0%</td><td>1.0</td><td>FRED: TEMPHELPS</td></tr>
+  <tr><td>New Mfg Orders</td><td>% YoY</td><td>-3.0%</td><td>3.0%</td><td>1.1</td><td>FRED: AMTMNO</td></tr>
+  <tr><td>Durable Goods Orders</td><td>% YoY</td><td>-3.0%</td><td>5.0%</td><td>0.8</td><td>FRED: DGORDER</td></tr>
+  <tr><td>Payroll Growth</td><td>% YoY</td><td>0.5%</td><td>2.0%</td><td>0.9</td><td>FRED: PAYEMS</td></tr>
+  <tr><td>Initial Claims 4wk MA</td><td>K</td><td>300 (bear)</td><td>200 (bull)</td><td>1.1</td><td>FRED: IC4WSA (inverted)</td></tr>
+  <tr><td>Temp Help Services</td><td>% YoY</td><td>-4.0%</td><td>2.0%</td><td>1.2</td><td>FRED: TEMPHELPS</td></tr>
   <tr><td>Total Loan Growth</td><td>% YoY</td><td>0.0%</td><td>5.0%</td><td>0.8</td><td>FRED: TOTLL</td></tr>
-  <tr><td>NFCI</td><td>Index</td><td>+0.0 (tight)</td><td>-0.50 (loose)</td><td>0.9</td><td>FRED: NFCI (inverted)</td></tr>
-  <tr><td>Fed Net Liquidity Δ</td><td>% YoY</td><td>-10%</td><td>+10%</td><td>0.7</td><td>Manual: WALCL−TGA−RRP</td></tr>
+  <tr><td>NFCI</td><td>Index</td><td>+0.0 (tight)</td><td>-0.50 (loose)</td><td>1.0</td><td>FRED: NFCI (inverted)</td></tr>
+  <tr><td>Leading Economic Index</td><td>% MoM</td><td>-0.5%</td><td>+0.2%</td><td>1.0</td><td>FRED: USSLIND</td></tr>
+  <tr><td>Consumer Sentiment</td><td>Index</td><td>60</td><td>80</td><td>0.7</td><td>FRED: UMCSENT</td></tr>
+  <tr><td>Fed Net Liquidity Δ</td><td>% YoY</td><td>-8%</td><td>+5%</td><td>1.0</td><td>Manual: WALCL−TGA−RRP</td></tr>
 </table>
 
 <h2>Inflation Score — Calculation</h2>
@@ -619,16 +637,18 @@ body{font-family:var(--font-sans);background:var(--bg-primary);color:var(--text-
   If value ≤ fallingThreshold → score = −1 (inflation falling)
 </div>
 
-<h3>Inflation Indicators — Thresholds & Weights</h3>
+<h3>Inflation Indicators — Thresholds & Weights (9 indicators)</h3>
 <table class="ind-table">
   <tr><th>Indicator</th><th>Unit</th><th>Falling ≤</th><th>Rising ≥</th><th>Weight</th><th>Source</th></tr>
-  <tr><td>Core PCE</td><td>% YoY</td><td>2.0%</td><td>3.0%</td><td>1.3</td><td>FRED: PCEPILFE</td></tr>
-  <tr><td>CPI</td><td>% YoY</td><td>2.0%</td><td>3.5%</td><td>1.1</td><td>FRED: CPIAUCSL</td></tr>
-  <tr><td>Roche Leading Inflation</td><td>%</td><td>1.8%</td><td>3.0%</td><td>1.2</td><td>Manual (Discipline Funds)</td></tr>
-  <tr><td>Avg Hourly Earnings</td><td>% YoY</td><td>3.0%</td><td>4.5%</td><td>0.9</td><td>FRED: CES0500000003</td></tr>
-  <tr><td>Shelter CPI</td><td>% YoY</td><td>3.0%</td><td>5.5%</td><td>0.8</td><td>FRED: CUSR0000SAH1</td></tr>
+  <tr><td>Core PCE</td><td>% YoY</td><td>2.0%</td><td>3.0%</td><td>1.2</td><td>FRED: PCEPILFE</td></tr>
+  <tr><td>CPI</td><td>% YoY</td><td>2.0%</td><td>3.5%</td><td>1.2</td><td>FRED: CPIAUCSL</td></tr>
+  <tr><td>5Y Breakeven Inflation</td><td>%</td><td>1.8%</td><td>2.8%</td><td>1.1</td><td>FRED: T5YIE</td></tr>
+  <tr><td>Roche Leading Inflation</td><td>%</td><td>1.8%</td><td>3.0%</td><td>1.0</td><td>Manual (Discipline Funds)</td></tr>
+  <tr><td>Avg Hourly Earnings</td><td>% YoY</td><td>3.0%</td><td>4.5%</td><td>1.0</td><td>FRED: CES0500000003</td></tr>
+  <tr><td>Shelter CPI</td><td>% YoY</td><td>3.0%</td><td>5.5%</td><td>1.0</td><td>FRED: CUSR0000SAH1</td></tr>
+  <tr><td>Real PCE Growth</td><td>% QoQ</td><td>1.0%</td><td>4.0%</td><td>0.8</td><td>FRED: DPCCRC1Q225SBEA</td></tr>
   <tr><td>Misery Index</td><td>UE+CPI</td><td>5.5</td><td>9.0</td><td>0.7</td><td>Manual (UE Rate + CPI YoY)</td></tr>
-  <tr><td>Federal Funds Rate</td><td>%</td><td>2.0%</td><td>4.5%</td><td>0.6</td><td>FRED: FEDFUNDS</td></tr>
+  <tr><td>Federal Funds Rate</td><td>%</td><td>2.0%</td><td>4.5%</td><td>0.5</td><td>FRED: FEDFUNDS</td></tr>
 </table>
 
 <h2>Fed Net Liquidity</h2>
@@ -642,17 +662,22 @@ body{font-family:var(--font-sans);background:var(--bg-primary);color:var(--text-
   Growth &lt; 0 AND Inflation &lt; 0 → <span style="color:var(--q-deflation)">DEFLATION</span>
 </div>
 
-<h2>Recession Warnings</h2>
-<p>Seven binary/threshold indicators that flag recession risk. If <strong>3 or more</strong> are triggered, a recession warning banner appears.</p>
+<h2>Transition Zones</h2>
+<p>When Growth score is within <strong>±0.15</strong> of zero, or Inflation within <strong>±0.12</strong>, the regime classification is uncertain. A purple <strong>"Regime Transition Zone"</strong> alert appears, indicating ambiguity. Small changes in a few indicators could flip the regime.</p>
+
+<h2>Recession Probability (Weighted)</h2>
+<p>Nine binary/threshold indicators flag recession risk. Each has a <strong>recession weight (rw)</strong> reflecting predictive power. A <strong>weighted probability</strong> is computed: Prob = Σ(triggered × rw) / Σ(all rw) × 100%. Warning banner at ≥30% (watch), full alert at ≥50%.</p>
 <table class="ind-table">
-  <tr><th>Indicator</th><th>Trigger</th><th>Description</th></tr>
-  <tr><td>Sahm Rule</td><td>≥ 0.50</td><td>3-month avg UE rate rises ≥ 0.5pp above 12-month low</td></tr>
-  <tr><td>10Y-2Y Yield Curve</td><td>&lt; 0</td><td>Yield curve inversion — historically precedes recessions</td></tr>
-  <tr><td>HY Credit Spreads</td><td>≥ 5.0%</td><td>High-yield OAS indicates financial stress</td></tr>
-  <tr><td>Roche Recession Rule</td><td>= 1</td><td>Cullen Roche composite recession indicator</td></tr>
-  <tr><td>Unemployment Rate</td><td>≥ 5.0%</td><td>Elevated unemployment vs. post-2010 average ~4-5%</td></tr>
-  <tr><td>NFCI Stress</td><td>≥ 0</td><td>Chicago Fed NFCI positive = tighter-than-average conditions</td></tr>
-  <tr><td>Temp Help Decline</td><td>≤ -5.0%</td><td>Leading indicator — temp layoffs precede broad layoffs</td></tr>
+  <tr><th>Indicator</th><th>Trigger</th><th>Rec. Weight</th><th>Description</th></tr>
+  <tr><td>Sahm Rule</td><td>≥ 0.50</td><td>2.0</td><td>3-month avg UE rises ≥ 0.5pp above 12-month low</td></tr>
+  <tr><td>10Y-2Y Yield Curve</td><td>&lt; 0</td><td>1.2</td><td>Yield curve inversion — leads recession by 12-18mo</td></tr>
+  <tr><td>HY Credit Spreads</td><td>≥ 5.0%</td><td>1.5</td><td>High-yield OAS indicates financial stress</td></tr>
+  <tr><td>Roche Recession Rule</td><td>= 1</td><td>1.5</td><td>Cullen Roche composite recession indicator</td></tr>
+  <tr><td>Unemployment Rate</td><td>≥ 5.0%</td><td>1.3</td><td>Elevated unemployment vs. post-2010 average ~4-5%</td></tr>
+  <tr><td>NFCI Stress</td><td>≥ 0</td><td>1.0</td><td>Chicago Fed NFCI positive = tighter-than-average</td></tr>
+  <tr><td>Temp Help Decline</td><td>≤ -5.0%</td><td>1.2</td><td>Leading indicator — temp layoffs precede broad layoffs</td></tr>
+  <tr><td>Jobless Claims Spike</td><td>≥ 300K</td><td>1.3</td><td>Initial claims 4-week MA above 300K</td></tr>
+  <tr><td>LEI Declining</td><td>≤ -0.4%</td><td>1.0</td><td>Conference Board LEI MoM decline</td></tr>
 </table>
 
 <h2>Mini Heatbar</h2>
@@ -783,53 +808,71 @@ const store = {
 };
 
 const G_IND = [
-  {id:'real_gdp',name:'Real GDP',unit:'% YoY',fred:'A191RL1Q225SBEA',def:2.4,
-   th:{bull:2.5,bear:1.0},desc:'BEA Quarterly',dir:'hb',w:1.2},
+  {id:'real_gdp',name:'Real GDP YoY',unit:'% YoY',fred:'A191RL1Q225SBEA',def:2.4,
+   th:{bull:3.0,bear:0.5},desc:'BEA Quarterly (QoQ SAAR used as proxy)',dir:'hb',w:1.2},
+  {id:'qoq_gdp',name:'Real GDP QoQ',unit:'% SAAR',fred:'A191RL1Q225SBEA',def:2.8,
+   th:{bull:3.0,bear:0.5},desc:'BEA Quarterly Annualized',dir:'hb',w:0.8},
   {id:'nominal_gdp',name:'Nominal GDP',unit:'% YoY',fred:'GDP',def:5.1,
-   th:{bull:5.0,bear:3.0},desc:'FRED GDP',dir:'hb',w:0.8},
+   th:{bull:5.0,bear:3.0},desc:'FRED GDP',dir:'hb',w:0.5},
   {id:'ism_pmi',name:'ISM Manufacturing PMI',unit:'Index',fred:null,def:52.6,
-   th:{bull:53.0,bear:47.0},desc:'Manual — ISM Report',dir:'hb',w:1.0},
+   th:{bull:52.5,bear:48.5},desc:'Manual — ISM Report',dir:'hb',w:1.1},
+  {id:'ism_svc',name:'ISM Services PMI',unit:'Index',fred:null,def:54.0,
+   th:{bull:54.0,bear:49.0},desc:'Manual — ISM Services',dir:'hb',w:1.0},
   {id:'ind_prod',name:'Industrial Production',unit:'% YoY',fred:'INDPRO',def:0.8,
    th:{bull:2.0,bear:-1.0},desc:'Fed Ind. Production',dir:'hb',w:0.9},
   {id:'new_orders',name:'New Mfg Orders',unit:'% YoY',fred:'AMTMNO',def:1.5,
-   th:{bull:3.0,bear:-3.0},desc:'Census Bureau',dir:'hb',w:0.9},
+   th:{bull:3.0,bear:-3.0},desc:'Census Bureau',dir:'hb',w:1.1},
+  {id:'durable_goods',name:'Durable Goods Orders',unit:'% YoY',fred:'DGORDER',def:2.0,
+   th:{bull:5.0,bear:-3.0},desc:'Census Bureau Durables',dir:'hb',w:0.8},
   {id:'payrolls',name:'Payroll Growth',unit:'% YoY',fred:'PAYEMS',def:1.4,
-   th:{bull:2.0,bear:0.5},desc:'BLS Nonfarm Payrolls',dir:'hb',w:1.1},
+   th:{bull:2.0,bear:0.5},desc:'BLS Nonfarm Payrolls',dir:'hb',w:0.9},
+  {id:'jobless_claims',name:'Initial Claims 4wk MA',unit:'K',fred:'IC4WSA',def:220,
+   th:{bull:200,bear:300},desc:'DOL Weekly Claims',dir:'lb',w:1.1},
   {id:'temp_help',name:'Temp Help Services',unit:'% YoY',fred:'TEMPHELPS',def:-3.5,
-   th:{bull:2.0,bear:-4.0},desc:'Leading employment',dir:'hb',w:1.0},
+   th:{bull:2.0,bear:-4.0},desc:'Leading employment',dir:'hb',w:1.2},
   {id:'loans',name:'Total Loan Growth',unit:'% YoY',fred:'TOTLL',def:2.0,
    th:{bull:5.0,bear:0.0},desc:'Fed H.8 Bank Credit',dir:'hb',w:0.8},
   {id:'nfci',name:'NFCI',unit:'Index',fred:'NFCI',def:-0.56,
-   th:{bull:-0.50,bear:0.0},desc:'Chicago Fed (neg = loose)',dir:'lb',w:0.9},
+   th:{bull:-0.50,bear:0.0},desc:'Chicago Fed (neg = loose)',dir:'lb',w:1.0},
+  {id:'lei',name:'Leading Economic Index',unit:'% MoM',fred:'USSLIND',def:-0.3,
+   th:{bull:0.2,bear:-0.5},desc:'Conference Board LEI',dir:'hb',w:1.0},
+  {id:'consumer_sent',name:'Consumer Sentiment',unit:'Index',fred:'UMCSENT',def:65,
+   th:{bull:80,bear:60},desc:'U of Michigan',dir:'hb',w:0.7},
   {id:'fed_liq',name:'Fed Net Liquidity Δ',unit:'% YoY',fred:null,def:-6.0,
-   th:{bull:10.0,bear:-10.0},desc:'WALCL−TGA−RRP YoY%',dir:'hb',w:0.7},
+   th:{bull:5.0,bear:-8.0},desc:'WALCL−TGA−RRP YoY%',dir:'hb',w:1.0},
 ];
 
 const I_IND = [
   {id:'core_pce',name:'Core PCE',unit:'% YoY',fred:'PCEPILFE',def:2.6,
-   th:{rise:3.0,fall:2.0},desc:'Fed preferred measure',w:1.3},
+   th:{rise:3.0,fall:2.0},desc:'Fed preferred measure',w:1.2},
   {id:'cpi',name:'CPI',unit:'% YoY',fred:'CPIAUCSL',def:2.8,
-   th:{rise:3.5,fall:2.0},desc:'BLS Consumer Prices',w:1.1},
+   th:{rise:3.5,fall:2.0},desc:'BLS Consumer Prices',w:1.2},
+  {id:'breakeven_5y',name:'5Y Breakeven Inflation',unit:'%',fred:'T5YIE',def:2.3,
+   th:{rise:2.8,fall:1.8},desc:'Market inflation expectation',w:1.1},
   {id:'roche_lii',name:'Roche Leading Inflation',unit:'%',fred:null,def:2.35,
-   th:{rise:3.0,fall:1.8},desc:'Discipline Funds LII (manual)',w:1.2},
+   th:{rise:3.0,fall:1.8},desc:'Discipline Funds LII (manual)',w:1.0},
   {id:'wages',name:'Avg Hourly Earnings',unit:'% YoY',fred:'CES0500000003',def:3.8,
-   th:{rise:4.5,fall:3.0},desc:'BLS Wage Growth',w:0.9},
+   th:{rise:4.5,fall:3.0},desc:'BLS Wage Growth',w:1.0},
   {id:'shelter',name:'Shelter CPI',unit:'% YoY',fred:'CUSR0000SAH1',def:4.0,
-   th:{rise:5.5,fall:3.0},desc:'Lagging, persistent',w:0.8},
+   th:{rise:5.5,fall:3.0},desc:'Lagging, persistent',w:1.0},
+  {id:'real_pce',name:'Real PCE Growth',unit:'% QoQ',fred:'DPCCRC1Q225SBEA',def:2.5,
+   th:{rise:4.0,fall:1.0},desc:'Real consumer spending',w:0.8},
   {id:'misery',name:'Misery Index',unit:'UE+CPI',fred:null,def:6.8,
    th:{rise:9.0,fall:5.5},desc:'Unemployment + CPI YoY',w:0.7},
   {id:'ffr',name:'Federal Funds Rate',unit:'%',fred:'FEDFUNDS',def:4.50,
-   th:{rise:4.5,fall:2.0},desc:'Fed policy rate',w:0.6},
+   th:{rise:4.5,fall:2.0},desc:'Fed policy rate',w:0.5},
 ];
 
 const W_IND = [
-  {id:'sahm',name:'Sahm Rule',fred:'SAHMREALTIME',def:0.43,thr:0.5,dir:'above',desc:'Trigger ≥ 0.50'},
-  {id:'yc',name:'10Y-2Y Yield Curve',fred:'T10Y2Y',def:0.15,thr:0,dir:'below',desc:'Inverted < 0'},
-  {id:'hy',name:'HY Credit Spreads',fred:'BAMLH0A0HYM2',def:3.4,thr:5.0,dir:'above',desc:'Stress > 5.0%'},
-  {id:'roche_rec',name:'Roche Recession Rule',fred:null,def:0,thr:1,dir:'above',desc:'1 = triggered'},
-  {id:'ue',name:'Unemployment Rate',fred:'UNRATE',def:4.0,thr:5.0,dir:'above',desc:'UE > 5%'},
-  {id:'nfci_w',name:'NFCI Stress',fred:'NFCI',def:-0.56,thr:0,dir:'above',desc:'Tightening > 0'},
-  {id:'temp_w',name:'Temp Help Decline',fred:'TEMPHELPS',def:-3.5,thr:-5.0,dir:'below',desc:'Layoff signal < -5%'},
+  {id:'sahm',name:'Sahm Rule',fred:'SAHMREALTIME',def:0.43,thr:0.5,dir:'above',desc:'Trigger ≥ 0.50',rw:2.0},
+  {id:'yc',name:'10Y-2Y Yield Curve',fred:'T10Y2Y',def:0.15,thr:0,dir:'below',desc:'Inverted < 0',rw:1.2},
+  {id:'hy',name:'HY Credit Spreads',fred:'BAMLH0A0HYM2',def:3.4,thr:5.0,dir:'above',desc:'Stress > 5.0%',rw:1.5},
+  {id:'roche_rec',name:'Roche Recession Rule',fred:null,def:0,thr:1,dir:'above',desc:'1 = triggered',rw:1.5},
+  {id:'ue',name:'Unemployment Rate',fred:'UNRATE',def:4.0,thr:5.0,dir:'above',desc:'UE > 5%',rw:1.3},
+  {id:'nfci_w',name:'NFCI Stress',fred:'NFCI',def:-0.56,thr:0,dir:'above',desc:'Tightening > 0',rw:1.0},
+  {id:'temp_w',name:'Temp Help Decline',fred:'TEMPHELPS',def:-3.5,thr:-5.0,dir:'below',desc:'Layoff signal < -5%',rw:1.2},
+  {id:'claims_w',name:'Jobless Claims Spike',fred:'IC4WSA',def:220,thr:300,dir:'above',desc:'Claims > 300K',rw:1.3},
+  {id:'lei_w',name:'LEI Declining',fred:'USSLIND',def:-0.3,thr:-0.4,dir:'below',desc:'LEI MoM < -0.4%',rw:1.0},
 ];
 
 let state={values:{},overrides:{},fredKey:''};
@@ -858,7 +901,7 @@ async function init(){
   W_IND.forEach(w=>{if(state.values[w.id]===undefined)state.values[w.id]=w.def});
   if(state.fredKey)document.getElementById('fredApiKey').value=state.fredKey;
   renderG();renderI();renderW();
-  if(hist.length>0){const l=hist[hist.length-1];drawQ(l.g,l.i,l.q);updateDisp(l.g,l.i,l.q,l.w)}
+  if(hist.length>0){const l=hist[hist.length-1];drawQ(l.g,l.i,l.q);updateDisp(l.g,l.i,l.q,l.w,l.rp,l.tn)}
   else drawQ(0,0,null);
   initAI();
 }
@@ -955,32 +998,56 @@ function doCalculate(){
   I_IND.forEach(i=>{const s=sI(i);iss+=s*i.w;iws+=i.w;updBadge(i.id,s,'i')});
   const is_=iws?iss/iws:0;
 
+  // Transition zones: scores near zero indicate regime ambiguity
+  const G_TRANSITION = 0.15;
+  const I_TRANSITION = 0.12;
+  const gInTransition = Math.abs(gs) < G_TRANSITION;
+  const iInTransition = Math.abs(is_) < I_TRANSITION;
+
   let q;
   if(gs>=0&&is_<0)q='goldilocks';
   else if(gs>=0&&is_>=0)q='overheating';
   else if(gs<0&&is_>=0)q='stagflation';
   else q='deflation';
 
-  let wc=0;
+  // Determine if in transition zone
+  let transitionNote = '';
+  if(gInTransition || iInTransition) {
+    const axes = [];
+    if(gInTransition) axes.push(`Growth (${gs.toFixed(3)}) near zero`);
+    if(iInTransition) axes.push(`Inflation (${is_.toFixed(3)}) near zero`);
+    transitionNote = axes.join(' & ') + ' — regime may shift soon';
+  }
+
+  // Weighted recession probability
+  let recWeightSum = 0, recTriggeredWeight = 0, wc = 0;
   W_IND.forEach(w=>{
-    const v=gv(w.id);const t=w.dir==='above'?v>=w.thr:v<=w.thr;if(t)wc++;
+    const v=gv(w.id);
+    const t=w.dir==='above'?v>=w.thr:v<=w.thr;
+    const rw = w.rw || 1.0;
+    recWeightSum += rw;
+    if(t){ recTriggeredWeight += rw; wc++; }
     const el=document.getElementById(`wc_${w.id}`);if(el)el.className=`warning-card ${t?'triggered':'safe'}`;
   });
+  const recessionProb = recWeightSum > 0 ? Math.round((recTriggeredWeight / recWeightSum) * 100) : 0;
 
-  updateDisp(gs,is_,q,wc);drawQ(gs,is_,q);
+  updateDisp(gs,is_,q,wc,recessionProb,transitionNote);drawQ(gs,is_,q);
 
   hist.push({
     date:new Date().toISOString(),
     g:Math.round(gs*1000)/1000,i:Math.round(is_*1000)/1000,
-    q,w:wc,vals:{...state.values},ovrs:{...state.overrides}
+    q,w:wc,rp:recessionProb,tn:transitionNote,vals:{...state.values},ovrs:{...state.overrides}
   });
   store.set('dq3_hist',JSON.stringify(hist));
-  lastRes={g:gs,i:is_,q,w:wc};
+  lastRes={g:gs,i:is_,q,w:wc,rp:recessionProb,tn:transitionNote};
   document.getElementById('lastUpdate').textContent=new Date().toLocaleString('en-GB');
   save();
 }
 
-function updateDisp(gs,is_,q,wc){
+function updateDisp(gs,is_,q,wc,recessionProb,transitionNote){
+  recessionProb = recessionProb ?? 0;
+  transitionNote = transitionNote ?? '';
+
   document.getElementById('growthScore').textContent=gs.toFixed(2);
   const ge=document.getElementById('growthScore');
   if(gs>0.15){ge.style.background='var(--green-dim)';ge.style.color='var(--green)'}
@@ -1006,8 +1073,31 @@ function updateDisp(gs,is_,q,wc){
   const km={Gold:'goldilocks',Over:'overheating',Stag:'stagflation',Defl:'deflation'};
   Object.entries(km).forEach(([k,v])=>document.getElementById('qCard'+k).classList.toggle('active',v===q));
 
-  document.getElementById('warningCount').textContent=`${wc}/${W_IND.length}`;
-  document.getElementById('recessionBanner').classList.toggle('active',wc>=3);
+  // Weighted recession probability display
+  document.getElementById('warningCount').textContent=`${recessionProb}%`;
+  const rb=document.getElementById('recessionBanner');
+  if(recessionProb>=50){
+    rb.textContent=`⚠ RECESSION WARNING — Probability: ${recessionProb}% (${wc}/${W_IND.length} indicators triggered). Elevated risk of economic contraction.`;
+    rb.classList.add('active');
+  }else if(recessionProb>=30){
+    rb.textContent=`⚡ RECESSION WATCH — Probability: ${recessionProb}% (${wc}/${W_IND.length} indicators triggered). Monitor closely.`;
+    rb.classList.add('active');
+    rb.style.background='linear-gradient(90deg,rgba(245,158,11,0.15),rgba(245,158,11,0.05))';
+    rb.style.borderColor='rgba(245,158,11,0.3)';
+    rb.style.color='var(--orange)';
+  }else{
+    rb.classList.remove('active');
+    rb.style.background='';rb.style.borderColor='';rb.style.color='';
+  }
+
+  // Regime transition alert
+  const ta=document.getElementById('transitionAlert');
+  if(transitionNote){
+    ta.textContent=`↔ REGIME TRANSITION ZONE — ${transitionNote}`;
+    ta.classList.add('active');
+  }else{
+    ta.classList.remove('active');
+  }
 }
 
 function updBadge(id,s,t){
@@ -1120,11 +1210,13 @@ function renderHistory(){
     const d=new Date(en.date);
     const ds=d.toLocaleDateString('en-GB')+' '+d.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'});
     const tr=document.createElement('tr');
+    const rp = en.rp !== undefined ? en.rp + '%' : en.w + '/' + W_IND.length;
+    const rpColor = (en.rp||0) >= 50 ? 'var(--red)' : (en.rp||0) >= 30 ? 'var(--orange)' : 'var(--green)';
     tr.innerHTML=`<td>${n}</td><td>${ds}</td>
       <td style="color:${en.g>=0?'var(--green)':'var(--red)'};font-weight:700">${en.g.toFixed(3)}</td>
       <td style="color:${en.i>=0?'var(--orange)':'var(--blue)'};font-weight:700">${en.i.toFixed(3)}</td>
       <td><span class="q-dot" style="background:${qc[en.q]}"></span>${qn[en.q]}</td>
-      <td>${en.w}/${W_IND.length}</td>
+      <td style="color:${rpColor};font-weight:600">${rp}</td>
       <td><button class="btn btn-outline" style="font-size:0.62rem;padding:0.2rem 0.5rem" onclick="loadH(${hist.length-1-idx})">Load</button></td>`;
     b.appendChild(tr);
   });
@@ -1188,12 +1280,13 @@ async function fetchAllFRED(){
 
   // Categorize FRED series by how to process them
   // YoY Monthly: need 13 observations to calculate (current/12-months-ago - 1)
-  const yoyMonthly=['PAYEMS','INDPRO','AMTMNO','TEMPHELPS','TOTLL','CPIAUCSL','CES0500000003','CUSR0000SAH1','PCEPILFE'];
+  const yoyMonthly=['PAYEMS','INDPRO','AMTMNO','DGORDER','TEMPHELPS','TOTLL','CPIAUCSL','CES0500000003','CUSR0000SAH1','PCEPILFE'];
   // YoY Quarterly: need 5 observations (current/4-quarters-ago - 1)
   const yoyQuarterly=['GDP'];
   // Direct value: already in correct format (%, index, spread)
   // A191RL1Q225SBEA = QoQ annualized %, NFCI = index, FEDFUNDS = %, SAHMREALTIME = pp,
-  // T10Y2Y = %, BAMLH0A0HYM2 = %, UNRATE = %
+  // T10Y2Y = %, BAMLH0A0HYM2 = %, UNRATE = %, T5YIE = %, UMCSENT = index,
+  // IC4WSA = thousands, USSLIND = % MoM, DPCCRC1Q225SBEA = QoQ annualized %
 
   const all=[...G_IND,...I_IND,...W_IND].filter(i=>i.fred);
   // Deduplicate FRED series (NFCI and TEMPHELPS are used in both growth + warnings)
@@ -1255,7 +1348,7 @@ async function fetchAllFRED(){
   msg+=`\n\n🔴 NOT available via FRED (need manual entry or AI Fetch):\n`;
   manualIds.forEach(m=>msg+=`  • ${m.name}\n`);
 
-  msg+=`\n⚠ Note: Real GDP (A191RL1Q225SBEA) reports QoQ annualized rate, not YoY. Consider manual override with actual YoY value.`;
+  msg+=`\n⚠ Note: Real GDP (A191RL1Q225SBEA) reports QoQ SAAR. Both Real GDP YoY and QoQ use this series — QoQ is accurate, YoY is approximate.`;
 
   alert(msg);
 }
@@ -1286,20 +1379,28 @@ Return ONLY a valid JSON object. Include ALL indicator IDs below, even ones I al
 
 {
   "real_gdp": <Real GDP YoY % (not QoQ annualized) — e.g. 2.8>,
+  "qoq_gdp": <Real GDP QoQ SAAR % — BEA quarterly annualized, e.g. 2.8>,
   "nominal_gdp": <Nominal GDP YoY % — e.g. 5.1>,
   "ism_pmi": <ISM Manufacturing PMI index (50=neutral) — e.g. 49.2>,
+  "ism_svc": <ISM Services PMI index (50=neutral) — e.g. 54.0>,
   "ind_prod": <Industrial Production YoY % — e.g. 0.8>,
   "new_orders": <New Manufacturing Orders YoY % — e.g. 1.5>,
+  "durable_goods": <Durable Goods Orders YoY % — e.g. 2.0>,
   "payrolls": <Nonfarm Payrolls YoY % — e.g. 1.6>,
+  "jobless_claims": <Initial Jobless Claims 4-week moving average in thousands — e.g. 220>,
   "temp_help": <Temp Help Services YoY % — negative if declining, e.g. -4.2>,
   "loans": <Total Bank Loan Growth YoY % — e.g. 2.0>,
   "nfci": <Chicago Fed NFCI index — negative=loose, positive=tight, e.g. -0.30>,
+  "lei": <Conference Board Leading Economic Index MoM % — e.g. -0.3>,
+  "consumer_sent": <U of Michigan Consumer Sentiment index — e.g. 65>,
   "fed_liq": <Fed Net Liquidity YoY % change (Fed Balance Sheet minus TGA minus RRP) — e.g. -5.0>,
   "core_pce": <Core PCE YoY % — Fed's preferred inflation gauge, e.g. 2.8>,
   "cpi": <CPI All Items YoY % — e.g. 3.0>,
+  "breakeven_5y": <5-Year Breakeven Inflation Rate % — market expectation, e.g. 2.3>,
   "roche_lii": <Roche/Discipline Funds Leading Inflation Index % — estimate based on commodity prices, housing, wages trends, e.g. 2.5>,
   "wages": <Average Hourly Earnings YoY % — e.g. 4.0>,
   "shelter": <Shelter CPI YoY % — typically lagging, e.g. 5.0>,
+  "real_pce": <Real PCE Growth QoQ annualized % — consumer spending, e.g. 2.5>,
   "ffr": <Federal Funds Rate target midpoint % — e.g. 5.25>,
   "sahm": <Sahm Rule value (3mo avg UE - 12mo low) — e.g. 0.30>,
   "yc": <10Y-2Y Treasury yield spread in % points — positive=normal, negative=inverted, e.g. 0.15>,
@@ -1313,6 +1414,7 @@ Return ONLY a valid JSON object. Include ALL indicator IDs below, even ones I al
 
 IMPORTANT: Return ONLY the JSON. No markdown, no explanation, just the raw JSON object.
 For real_gdp provide TRUE YoY growth rate, not the BEA quarterly annualized figure.
+For qoq_gdp provide the BEA quarterly annualized (SAAR) figure.
 For roche_lii, estimate based on leading inflation components (commodities, housing, wages, expectations).
 Be as accurate as possible using most recent data known to you.`;
 }
@@ -1395,6 +1497,8 @@ async function aiAutoFill() {
         // Try to derive from shared indicators
         if (w.id === 'nfci_w' && data.nfci !== undefined) data[w.id] = data.nfci;
         else if (w.id === 'temp_w' && data.temp_help !== undefined) data[w.id] = data.temp_help;
+        else if (w.id === 'claims_w' && data.jobless_claims !== undefined) data[w.id] = data.jobless_claims;
+        else if (w.id === 'lei_w' && data.lei !== undefined) data[w.id] = data.lei;
         else { skipped.push(w.name); return; }
       }
       const val = Math.round(parseFloat(data[w.id]) * 100) / 100;
@@ -1581,7 +1685,8 @@ function buildMacroSnapshot() {
 
   const gVals = gScored.map((i, idx) => {
     const prefix = idx < 3 ? '★' : ' ';
-    return `${prefix} ${i.name}: ${i.val} ${i.unit} [score: ${i.score.toFixed(2)}, weight: ${i.w}, signal: ${i.signal}] (bear≤${i.th.bear}, bull≥${i.th.bull})`;
+    const thStr = i.dir === 'lb' ? `(bull≤${i.th.bull}, bear≥${i.th.bear} — lower is better)` : `(bear≤${i.th.bear}, bull≥${i.th.bull})`;
+    return `${prefix} ${i.name}: ${i.val} ${i.unit} [score: ${i.score.toFixed(2)}, weight: ${i.w}, signal: ${i.signal}] ${thStr}`;
   }).join('\n');
 
   // Score and rank inflation indicators
@@ -1600,18 +1705,19 @@ function buildMacroSnapshot() {
   const wVals = W_IND.map(w => {
     const v = gv(w.id);
     const triggered = w.dir === 'above' ? v >= w.thr : v <= w.thr;
-    return `${w.name}: ${v} (trigger: ${w.dir === 'above' ? '≥' : '≤'} ${w.thr}) → ${triggered ? 'TRIGGERED' : 'Safe'}`;
+    return `${w.name}: ${v} (trigger: ${w.dir === 'above' ? '≥' : '≤'} ${w.thr}, weight: ${w.rw || 1.0}) → ${triggered ? 'TRIGGERED' : 'Safe'}`;
   }).join('\n');
 
   let scores = '';
   if (lastRes) {
     scores = `\nCurrent Scores: Growth=${lastRes.g.toFixed(3)}, Inflation=${lastRes.i.toFixed(3)}, Quadrant=${lastRes.q.toUpperCase()}, Warnings=${lastRes.w}/${W_IND.length}`;
+    scores += `\nRecession Probability: ${lastRes.rp || 0}% (weighted)`;
     // Regime transition proximity
     const gDist = Math.abs(lastRes.g).toFixed(3);
     const iDist = Math.abs(lastRes.i).toFixed(3);
     scores += `\nProximity to quadrant boundary: Growth ${gDist} from zero, Inflation ${iDist} from zero`;
-    if (parseFloat(gDist) < 0.15 || parseFloat(iDist) < 0.15) {
-      scores += ' ⚠ NEAR REGIME TRANSITION';
+    if (lastRes.tn) {
+      scores += `\n⚠ TRANSITION ZONE: ${lastRes.tn}`;
     }
   }
 
@@ -1698,11 +1804,23 @@ Each indicator scores from -1 to +1 via linear interpolation between historical 
 ## KEY RELATIONSHIPS TO MONITOR
 - Yield curve inversion → typically leads recession by 12-18 months
 - Sahm Rule trigger → recession likely already underway
+- Initial Jobless Claims spike above 300K → labor market weakening
 - Temp Help decline → leading indicator, precedes broad payroll weakness by 3-6 months
+- ISM Services (non-manufacturing) divergence from ISM Manufacturing → services vs goods economy split
 - NFCI tightening → financial conditions restricting growth
 - Fed Net Liquidity → drives asset prices with ~3 month lag
+- Conference Board LEI → composite leading indicator, multiple consecutive declines signal recession
+- 5Y Breakeven Inflation → market-implied inflation expectations, forward-looking
 - Shelter CPI → lagging indicator, will overstate current inflation pressure
 - Core PCE vs CPI divergence → signals where true inflation pressure lies
+- Consumer Sentiment collapse → precedes spending pullback by 1-2 quarters
+- Durable Goods Orders decline → capex cycle weakening
+
+## TRANSITION ZONES
+The dashboard uses transition zones (Growth ±0.15, Inflation ±0.12 from zero). When scores fall within these zones, the regime classification is uncertain. Highlight this ambiguity and discuss which indicators would need to move to confirm a regime shift.
+
+## RECESSION PROBABILITY
+The dashboard computes a weighted recession probability (0-100%) from 9 warning indicators. Each has a recession weight (rw) reflecting its predictive power. Sahm Rule (rw=2.0) is the strongest signal. Discuss the probability level and which specific triggers are active.
 
 ## TONE
 Professional, data-driven, and direct. You are providing analytical commentary for sophisticated macro investors, not financial advice. Note this disclaimer when giving positioning suggestions.`;
@@ -2188,15 +2306,16 @@ const AI_TEMPLATES = {
 8. **What to Watch Next** — leading indicators and upcoming data releases that matter most`,
 
   recession: `Here is the current macro dashboard data:\n\n{snapshot}\n\nProvide a deep-dive recession risk analysis:
-1. **Recession Probability Estimate** — give a percentage and confidence level
-2. **Warning Indicator Analysis** — assess each of the 7 recession indicators individually
+1. **Recession Probability Estimate** — compare with the dashboard's weighted probability and give your own assessment with confidence level
+2. **Warning Indicator Analysis** — assess each of the 9 recession indicators individually (Sahm, Yield Curve, HY Spreads, Roche Rule, UE Rate, NFCI, Temp Help, Jobless Claims, LEI)
 3. **Historical Pattern Matching** — which past recession does the current setup most resemble?
 4. **Yield Curve Signal** — what is the curve telling us? Consider lag effects (12-18 months)
 5. **Sahm Rule Status** — current level and trajectory
-6. **Labor Market Assessment** — payrolls + temp help + unemployment composite picture
-7. **Financial Conditions** — NFCI + credit spreads + liquidity picture
-8. **Timeline** — if recession risk is elevated, when would it most likely materialize?
-9. **Key triggers** — what specific data points would escalate or de-escalate the risk?`,
+6. **Labor Market Assessment** — payrolls + temp help + unemployment + jobless claims composite picture
+7. **Financial Conditions** — NFCI + credit spreads + liquidity + consumer sentiment picture
+8. **Leading Indicators** — LEI trend, ISM readings, new orders — what do forward-looking indicators say?
+9. **Timeline** — if recession risk is elevated, when would it most likely materialize?
+10. **Key triggers** — what specific data points would escalate or de-escalate the risk?`,
 
   portfolio: `Here is the current macro dashboard data:\n\n{snapshot}\n\nProvide detailed portfolio positioning recommendations:
 1. **Current Regime Summary** — one paragraph on where we are
